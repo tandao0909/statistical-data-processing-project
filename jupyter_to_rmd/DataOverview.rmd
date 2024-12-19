@@ -1,0 +1,338 @@
+
+```{r}
+library(janitor)
+library(tidyverse)
+library(ggplot2)
+library(gridExtra)
+
+```
+
+
+```{r}
+data <- read.csv("diabetes_012_health_indicators_BRFSS2015 (1).csv", na=c("", "NA", "N/A")) |> clean_names()
+glimpse(data)
+```
+
+
+Tổng cộng có 22 cột, và tất cả các cột đều ở định dạng `<dbl>`, nghĩa là định dạng số, chúng ta sẽ cùng xem xét xem biến nào là biến định lượng và biến nào là biến định tính
+
+
+```{r}
+unique_counts <- data.frame(
+    variable = names(data),
+    unique_count = sapply(data, function(x) length(unique(x)))
+)
+print(unique_counts)
+```
+
+
+Theo như chi tiết về bộ dữ liệu, thì ta có tất cả là biến định tính, chỉ có `bmi`, `ment_hlth`, `phys_hlth` là biến định lượng.
+
+
+```{r}
+qualitative_vars <- unique_counts |> filter(unique_count <= 13) 
+qualitative_vars = qualitative_vars$variable
+
+quantitative_vars <- c("bmi", "ment_hlth", "phys_hlth")
+
+print(qualitative_vars)
+
+print(quantitative_vars)
+
+# Convert qualitative variables to factors
+data[qualitative_vars] <- lapply(data[qualitative_vars], as.factor)
+```
+
+
+```{r}
+plots <- lapply(quantitative_vars, function(var) {
+    ggplot(data = data, aes(x = !!sym(var))) +
+        geom_histogram(fill = "white", color = "black", binwidth = 1) +
+        ggtitle(paste("Histogram of", var))
+})
+
+do.call(grid.arrange, c(plots, ncol = 1))
+```
+
+
+- Chỉ số BMI tập trung nhiều ở vùng 23-30
+- `ment_hlth` và `phys_hlth` tập trung ở 0 rất nhiều, tiếp theo là 30. Các giá trị còn lại rất ít
+
+
+```{r}
+summary_stats <- data |> 
+    summarise(across(all_of(quantitative_vars), list(
+        mean = ~mean(.),
+        median = ~median(.),
+        sd = ~sd(.),
+        max = ~max(.),
+        min = ~min(.)
+    ), .names = "{col}_{fn}"))
+
+summary_stats_t <- as.data.frame(t(summary_stats))
+print(summary_stats_t)
+```
+
+
+## Plot từng biến định lượng một (bar chart)
+
+
+```{r}
+plot_var = qualitative_vars[1]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Bộ dữ liệu này, số điểm quan sát không bị mắc bệnh tiểu đường là nhiều nhất, tiếp theo là đã bị tiểu đường ít nhất là tiền tiểu đường. Sự chênh lệch lớn giữa nhóm không mắc bệnh (0) và hai nhóm mắc bệnh (1 và 2) có thể gây mất cân bằng dữ liệu. Điều này có thể cần được xử lý nếu áp dụng các mô hình phân tích hoặc học máy để đảm bảo độ chính xác cao hơn.
+
+
+```{r}
+plot_var = qualitative_vars[2]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Ta có các quan sát mắc tình trạng cao huyết áp ít hơn các quan sát bình thường, chênh lệch khoảng 30.000-40.000 người
+
+
+```{r}
+plot_var = qualitative_vars[3]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Tương tự tình trạng cholesterol cao cũng vậy
+
+
+```{r}
+plot_var = qualitative_vars[4]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Ta thấy được các quan sát đa số đã kiểm tra cholesterol trong 5 năm. Một số rất ít là vẫn chưa kiểm tra
+
+
+```{r}
+plot_var = qualitative_vars[5]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Tỉ lệ người hút nhiều thuốc cao hơn tỉ lệ người ít hút thuốc hơn.
+
+
+```{r}
+plot_var = qualitative_vars[6]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Đa số các quan sát đều chưa từng bị đột quỵ
+
+
+```{r}
+plot_var = qualitative_vars[7]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Đa số các quan sát không bị bệnh tim mạch vành (CHD) hoặc nhồi máu cơ tim (MI)
+
+
+```{r}
+plot_var = qualitative_vars[8]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Các quan sát rất tích cực hoạt động thể chất trong vòng 30 ngày, và khoảng hơn 1/5 quan sát không thực hiện việc đó.
+
+
+```{r}
+plot_var = qualitative_vars[9]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Số người ăn trái cây ít nhất một ngày gần gấp đôi số người không.
+
+
+```{r}
+plot_var = qualitative_vars[10]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Đối với việc ăn rau củ quả mỗi ngày thì các quan sát có thực hiện việc đó rất nhiều chiếm hơn 4/5 toàn bộ quan sát
+
+
+```{r}
+plot_var = qualitative_vars[11]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Đa số các quan sát đều không uống nhiều rượu
+
+
+```{r}
+plot_var = qualitative_vars[12]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Đa số các quan sát đều đã có tiếp cận các dịch vụ sức khỏe
+
+
+```{r}
+plot_var = qualitative_vars[13]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Có một số ít quan sát (khoảng dưới 50.000) không có gặp bác sĩ trong vòng 12 tháng vì không có kinh phí.
+
+
+```{r}
+plot_var = qualitative_vars[14]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Đa số các tình trạng sức khỏe chung của quan sát đều ở mức `Very Good` và `Good`. 
+
+
+```{r}
+plot_var = qualitative_vars[15]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Có khoảng gần 50.000 quan sát gặp tình trạng khó khăn trong đi lại
+
+
+```{r}
+plot_var = qualitative_vars[16]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Lấy mẫu theo giới tính khá là đồng đều, không có sự chênh lệch lớn
+
+
+```{r}
+plot_var = qualitative_vars[17]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Số lượng người tăng dần từ nhóm 1 đến nhóm 10, đạt đỉnh tại nhóm tuổi 10. Sau nhóm 10, số lượng người bắt đầu giảm dần ở các nhóm 11, 12, và 13.
+
+Nhóm tuổi 10 có số lượng người cao nhất trong dataset. Các nhóm tuổi từ 1 đến 5 có số lượng người tham gia thấp hơn so với các nhóm từ 6 đến 10, cho thấy nhóm trung niên hoặc lớn tuổi chiếm tỷ lệ cao hơn.
+
+
+```{r}
+plot_var = qualitative_vars[18]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+Biểu đồ cho thấy số lượng người tham gia tăng dần theo trình độ học vấn, với các nhóm giáo dục từ 1 đến 6. 
+- Nhóm 6 (học vấn cao nhất) có số lượng người tham gia cao nhất, vượt trội hơn hẳn so với các nhóm khác. 
+- Nhóm 1 (học vấn thấp nhất) có số lượng người tham gia thấp nhất, gần như không đáng kể.
+- Nhóm 4, 5, và 6 chiếm đa số, điều này có thể cho thấy rằng phần lớn người tham gia có trình độ học vấn từ trung học phổ thông trở lên.
+
+
+```{r}
+plot_var = qualitative_vars[19]
+
+ggplot(data = data, aes_string(x = plot_var, fill = plot_var)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", plot_var)) +
+    theme(legend.position = "none")
+```
+
+
+- Nhóm 8 (thu nhập cao nhất) chiếm tỷ lệ lớn nhất trong dataset, vượt trội hơn hẳn so với các nhóm khác.
+- Nhóm 1, 2, và 3 (thu nhập thấp) có số lượng ít hơn đáng kể so với các nhóm thu nhập trung bình và cao hơn.
+- Số lượng người tham gia có xu hướng tăng khi mức thu nhập tăng. Điều này có thể cho thấy những người có thu nhập cao hơn có xu hướng tham gia khảo sát nhiều hơn hoặc được tiếp cận dịch vụ khảo sát dễ dàng hơn.
+- Số lượng người tăng dần từ nhóm thu nhập thấp (1-3) đến nhóm thu nhập trung bình (4-6), sau đó tăng mạnh ở nhóm thu nhập cao (7-8).
+
+
+```{r}
+
+```
+
