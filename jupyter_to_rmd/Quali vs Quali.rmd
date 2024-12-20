@@ -1,0 +1,965 @@
+
+```{r}
+library(janitor)
+library(tidyverse)
+library(ggplot2)
+```
+
+
+```{r}
+data <- read.csv("/Users/hoaho/Study/HCMUS/R/statistical-data-processing-project/data/diabetes_012_health_indicators_BRFSS2015.csv", na=c("", "NA", "N/A")) |> clean_names()
+glimpse(data)
+```
+
+
+#### 1. diabetes_012 vs high_bp
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$high_bp, data$diabetes_012))
+colnames(freq_data) <- c("high_bp", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$high_bp <- as.factor(freq_data$high_bp)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = high_bp, y = frequency, fill = diabetes_012)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_text(aes(label = frequency), 
+            position = position_dodge(width = 0.7), 
+            vjust = -0.5, 
+            size = 3) +
+  labs(
+    title = "Diabetes Frequency by High Blood Pressure Status",
+    x = "High Blood Pressure",
+    y = "Frequency",
+    fill = "Diabetes Status"
+  ) +
+  scale_fill_manual(
+    values = c("red", "blue", "green"),
+    labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  )
+```
+
+
+**Huyết áp không cao (0)**:
+- Phần lớn thuộc nhóm **Không tiểu đường** (134,391).
+- Nhóm **Tiền tiểu đường** (1,718) và **Tiểu đường** (8,742) thấp hơn rất nhiều.
+
+**Huyết áp cao (1)**:
+- **Không tiểu đường** vẫn chiếm đa số (79,312).
+- Số ca **Tiền tiểu đường** (2,913) và **Tiểu đường** (26,604) tăng đáng kể so với huyết áp không cao.
+
+**Nhận xét**:
+Huyết áp cao có liên quan đến tần suất cao hơn của trạng thái **Tiểu đường** so với huyết áp bình thường.
+
+
+#### 2. diabetes_012 vs high_chol
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$high_chol, data$diabetes_012))
+colnames(freq_data) <- c("high_chol", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$high_chol <- as.factor(freq_data$high_chol)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = high_chol, y = frequency, fill = diabetes_012)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  geom_text(aes(label = frequency), 
+            position = position_dodge(width = 0.7), 
+            vjust = -0.5, 
+            size = 3) +
+  labs(
+    title = "Diabetes Frequency by High Cholesterol Status",
+    x = "High Cholesterol",
+    y = "Frequency",
+    fill = "Diabetes Status"
+  ) +
+  scale_fill_manual(
+    values = c("red", "blue", "green"),
+    labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 14),
+    axis.text = element_text(size = 12),
+    legend.title = element_text(size = 14),
+    legend.text = element_text(size = 12)
+  )
+```
+
+
+**Cholesterol không cao (0)**:
+- Phần lớn thuộc nhóm **Không tiểu đường** (132,673).
+- Nhóm **Tiền tiểu đường** (1,756) và **Tiểu đường** (11,660) thấp hơn nhiều.
+
+**Cholesterol cao (1)**:
+- **Không tiểu đường** vẫn chiếm đa số (81,030).
+- Số ca **Tiền tiểu đường** (2,875) và **Tiểu đường** (23,686) tăng đáng kể so với cholesterol không cao.
+
+**Nhận xét**:
+Cholesterol cao có liên quan đến tần suất cao hơn của trạng thái **Tiểu đường** so với cholesterol bình thường.
+
+
+#### 3. diabetes_012 vs chol_check
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$chol_check, data$diabetes_012))
+colnames(freq_data) <- c("chol_check", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$chol_check <- as.factor(freq_data$chol_check)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = chol_check, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Cholesterol Check Status",
+        x = "Cholesterol Check",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Không kiểm tra cholesterol (0)**:
+- Nhóm **Không tiểu đường** chiếm 9,167.
+- Nhóm **Tiền tiểu đường** (62) và **Tiểu đường** (241) rất ít.
+
+**Kiểm tra cholesterol (1)**:
+- **Không tiểu đường** chiếm đa số (204,536).
+- Nhóm **Tiền tiểu đường** (4,569) và **Tiểu đường** (35,105) tăng rõ rệt so với không kiểm tra.
+
+**Nhận xét**:
+Việc kiểm tra cholesterol có liên quan đến số lượng cao hơn các trường hợp **Tiền tiểu đường** và **Tiểu đường**, cho thấy tầm quan trọng của việc kiểm tra sức khỏe.
+
+
+#### 4. diabetes_012 vs smoker
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$smoker, data$diabetes_012))
+colnames(freq_data) <- c("smoker", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$smoker <- as.factor(freq_data$smoker)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = smoker, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Smoking Status",
+        x = "Smoking Status",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Không hút thuốc (0)**:
+- Nhóm **Không tiểu đường** chiếm 121,879.
+- Nhóm **Tiền tiểu đường** (2,349) và **Tiểu đường** (17,029) thấp hơn.
+
+**Hút thuốc (1)**:
+- Nhóm **Không tiểu đường** chiếm đa số (91,824).
+- Nhóm **Tiền tiểu đường** (2,282) và **Tiểu đường** (18,317) tăng nhẹ so với không hút thuốc.
+
+**Nhận xét**:
+Hút thuốc có liên quan đến tần suất cao hơn của trạng thái **Tiểu đường**, tuy nhiên, số lượng người **Không tiểu đường** vẫn chiếm ưu thế trong cả hai nhóm.
+
+
+#### 5. diabetes_012 vs stroke
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$stroke, data$diabetes_012))
+colnames(freq_data) <- c("stroke", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$stroke <- as.factor(freq_data$stroke)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = stroke, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Stroke Status",
+        x = "Stroke Status",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Không bị đột quỵ (0)**:
+- Nhóm **Không tiểu đường** chiếm 206,944.
+- Nhóm **Tiền tiểu đường** (4,366) và **Tiểu đường** (32,078) thấp hơn nhưng vẫn đáng kể.
+
+**Có bị đột quỵ (1)**:
+- Nhóm **Không tiểu đường** giảm xuống còn 6,759.
+- Nhóm **Tiền tiểu đường** (265) và **Tiểu đường** (3,268) cũng có xu hướng giảm nhưng tỷ lệ **Tiểu đường** vẫn cao hơn **Tiền tiểu đường**.
+
+**Nhận xét**:
+Tình trạng đột quỵ có liên quan đến sự gia tăng tỷ lệ **Tiểu đường**, đặc biệt ở nhóm đã từng bị đột quỵ.
+
+
+#### 6. diabetes_012 vs heart_diseaseor_attack
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$heart_diseaseor_attack, data$diabetes_012))
+colnames(freq_data) <- c("heart_diseaseor_attack", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$heart_diseaseor_attack <- as.factor(freq_data$heart_diseaseor_attack)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = heart_diseaseor_attack, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Heart Disease or Attack Status",
+        x = "Heart Disease or Attack Status",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Không có bệnh tim hoặc đau tim (0)**:
+- Nhóm **Không tiểu đường** chiếm 198,352.
+- Nhóm **Tiền tiểu đường** (3,967) và **Tiểu đường** (27,468) thấp hơn đáng kể.
+
+**Có bệnh tim hoặc đau tim (1)**:
+- Nhóm **Không tiểu đường** giảm xuống còn 15,351.
+- Nhóm **Tiền tiểu đường** (664) và **Tiểu đường** (7,878) tăng tỷ lệ đáng kể so với nhóm không có bệnh.
+
+**Nhận xét**:
+Tình trạng bệnh tim hoặc đau tim có liên quan đến sự gia tăng tỷ lệ mắc **Tiểu đường**, đặc biệt ở nhóm đã từng có tiền sử bệnh tim hoặc đau tim.
+
+
+#### 7. diabetes_012 vs phys_activity
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$phys_activity, data$diabetes_012))
+colnames(freq_data) <- c("phys_activity", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$phys_activity <- as.factor(freq_data$phys_activity)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = phys_activity, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Physical Activity Status",
+        x = "Physical Activity Status",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Không hoạt động thể chất (0)**:
+- Nhóm **Không tiểu đường** chiếm 47,212.
+- Nhóm **Tiền tiểu đường** (1,489) và **Tiểu đường** (13,059) thấp hơn nhưng đáng kể.
+
+**Có hoạt động thể chất (1)**:
+- Nhóm **Không tiểu đường** tăng lên 166,491.
+- Nhóm **Tiền tiểu đường** (3,142) và **Tiểu đường** (22,287) cũng tăng so với nhóm không hoạt động thể chất.
+
+**Nhận xét**:
+Hoạt động thể chất có liên quan đến sự gia tăng tỷ lệ **Tiểu đường**, tuy nhiên nhóm có hoạt động thể chất cũng có tỷ lệ **Không tiểu đường** cao hơn hẳn, cho thấy lợi ích của việc tập luyện.
+
+
+#### 8. diabetes_012 vs fruits
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$fruits, data$diabetes_012))
+colnames(freq_data) <- c("fruits", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$fruits <- as.factor(freq_data$fruits)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = fruits, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Fruits Consumption",
+        x = "Fruits Consumption",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Không tiêu thụ trái cây (0)**:
+- Nhóm **Không tiểu đường** chiếm 76,287.
+- Nhóm **Tiền tiểu đường** (1,842) và **Tiểu đường** (14,653) thấp hơn đáng kể.
+
+**Có tiêu thụ trái cây (1)**:
+- Nhóm **Không tiểu đường** tăng lên 137,416.
+- Nhóm **Tiền tiểu đường** (2,789) và **Tiểu đường** (20,693) cũng tăng so với nhóm không tiêu thụ trái cây.
+
+**Nhận xét**:
+Việc tiêu thụ trái cây có liên quan đến sự gia tăng tỷ lệ **Tiểu đường**, nhưng đồng thời cũng cho thấy tỷ lệ **Không tiểu đường** cao hơn, phản ánh lợi ích sức khỏe của trái cây.
+
+
+#### 9. diabetes_012 vs veggies
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$veggies, data$diabetes_012))
+colnames(freq_data) <- c("veggies", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$veggies <- as.factor(freq_data$veggies)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = veggies, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Vegetables Consumption",
+        x = "Vegetables Consumption",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Không tiêu thụ rau xanh (0)**:
+- Nhóm **Không tiểu đường** chiếm 38,159.
+- Nhóm **Tiền tiểu đường** (1,070) và **Tiểu đường** (8,610) thấp hơn đáng kể.
+
+**Có tiêu thụ rau xanh (1)**:
+- Nhóm **Không tiểu đường** tăng lên 175,544.
+- Nhóm **Tiền tiểu đường** (3,561) và **Tiểu đường** (26,736) cũng tăng rõ rệt so với nhóm không tiêu thụ rau xanh.
+
+**Nhận xét**:
+Tiêu thụ rau xanh có liên quan đến sự gia tăng tỷ lệ **Không tiểu đường**, phản ánh lợi ích sức khỏe của rau xanh trong việc giảm nguy cơ mắc bệnh tiểu đường.
+
+
+#### 10. diabetes_012 vs hvy_alcohol_consump
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$hvy_alcohol_consump, data$diabetes_012))
+colnames(freq_data) <- c("hvy_alcohol_consump", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$hvy_alcohol_consump <- as.factor(freq_data$hvy_alcohol_consump)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = hvy_alcohol_consump, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Heavy Alcohol Consumption",
+        x = "Heavy Alcohol Consumption",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Không tiêu thụ rượu nặng (0)**:
+- Nhóm **Không tiểu đường** chiếm 200,487.
+- Nhóm **Tiền tiểu đường** (4,423) và **Tiểu đường** (34,514) cao hơn đáng kể.
+
+**Có tiêu thụ rượu nặng (1)**:
+- Nhóm **Không tiểu đường** giảm xuống còn 13,216.
+- Nhóm **Tiền tiểu đường** (208) và **Tiểu đường** (832) rất thấp.
+
+**Nhận xét**:
+Tiêu thụ rượu nặng có liên quan đến tỷ lệ thấp hơn ở cả ba trạng thái, nhưng sự giảm này có thể liên quan đến số lượng người tiêu thụ rượu nặng ít hơn trong tổng số mẫu.
+
+
+#### 11. diabetes_012 vs any_healthcare
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$any_healthcare, data$diabetes_012))
+colnames(freq_data) <- c("any_healthcare", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$any_healthcare <- as.factor(freq_data$any_healthcare)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = any_healthcare, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Any Healthcare Status",
+        x = "Any Healthcare",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Không tiếp cận dịch vụ chăm sóc sức khỏe (0)**:
+- Nhóm **Không tiểu đường** chiếm 10,741.
+- Nhóm **Tiền tiểu đường** (254) và **Tiểu đường** (1,422) thấp hơn nhiều.
+
+**Có tiếp cận dịch vụ chăm sóc sức khỏe (1)**:
+- Nhóm **Không tiểu đường** tăng mạnh lên 202,962.
+- Nhóm **Tiền tiểu đường** (4,377) và **Tiểu đường** (33,924) cũng tăng đáng kể.
+
+**Nhận xét**:
+Việc tiếp cận dịch vụ chăm sóc sức khỏe có liên quan đến sự gia tăng tỷ lệ **Không tiểu đường** và **Tiểu đường**, cho thấy tầm quan trọng của dịch vụ y tế trong việc phát hiện và quản lý bệnh tiểu đường.
+
+
+#### 12. diabetes_012 vs no_docbc_cost 
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$no_docbc_cost, data$diabetes_012))
+colnames(freq_data) <- c("no_docbc_cost", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$no_docbc_cost <- as.factor(freq_data$no_docbc_cost)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = no_docbc_cost, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by No Doctor Because of Cost Status",
+        x = "No Doctor Because of Cost",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Không bị hạn chế vì chi phí (0)**:
+- Nhóm **Không tiểu đường** chiếm 196,690.
+- Nhóm **Tiền tiểu đường** (4,032) và **Tiểu đường** (31,604) cao hơn đáng kể.
+
+**Bị hạn chế vì chi phí (1)**:
+- Nhóm **Không tiểu đường** giảm xuống còn 17,013.
+- Nhóm **Tiền tiểu đường** (599) và **Tiểu đường** (3,742) cũng giảm đáng kể.
+
+**Nhận xét**:
+Chi phí cản trở việc đến bác sĩ có liên quan đến tỷ lệ **Không tiểu đường** và **Tiểu đường** thấp hơn, cho thấy rằng việc tiếp cận bác sĩ bị giới hạn bởi chi phí có thể làm giảm khả năng phát hiện và quản lý bệnh tiểu đường.
+
+
+#### 13. diabetes_012 vs gen_hlth 
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$gen_hlth, data$diabetes_012))
+colnames(freq_data) <- c("gen_hlth", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$gen_hlth <- as.factor(freq_data$gen_hlth)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = gen_hlth, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by General Health Status",
+        x = "General Health Status",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Tình trạng sức khỏe tốt hơn (1 - 2)**:
+- **Mức 1**: Nhóm **Không tiểu đường** chiếm 43,846, trong khi **Tiền tiểu đường** (313) và **Tiểu đường** (140) rất thấp.
+- **Mức 2**: Nhóm **Không tiểu đường** chiếm 81,489, cao nhất trong tất cả các mức. Nhóm **Tiền tiểu đường** (1,214) và **Tiểu đường** (6,381) tăng hơn so với mức 1.
+
+**Tình trạng sức khỏe trung bình (3)**:
+- Nhóm **Không tiểu đường** giảm xuống 60,461, trong khi nhóm **Tiền tiểu đường** (1,728) và **Tiểu đường** (13,457) tăng đáng kể.
+
+**Tình trạng sức khỏe kém hơn (4 - 5)**:
+- **Mức 4**: Nhóm **Không tiểu đường** giảm còn 20,755, nhóm **Tiền tiểu đường** (1,025) và **Tiểu đường** (9,790) tiếp tục tăng.
+- **Mức 5**: Nhóm **Không tiểu đường** giảm thấp nhất, chỉ còn 7,152, trong khi nhóm **Tiền tiểu đường** (351) và **Tiểu đường** (4,578) vẫn hiện diện đáng kể.
+
+**Nhận xét**:
+Tình trạng sức khỏe tổng quát kém hơn có liên quan đến tỷ lệ **Tiểu đường** cao hơn, trong khi nhóm có sức khỏe tốt chủ yếu thuộc nhóm **Không tiểu đường**, nhấn mạnh mối quan hệ giữa sức khỏe tổng thể và nguy cơ mắc bệnh tiểu đường.
+
+
+#### 14. diabetes_012 vs diff_walk
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$diff_walk, data$diabetes_012))
+colnames(freq_data) <- c("diff_walk", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$diff_walk <- as.factor(freq_data$diff_walk)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = diff_walk, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Difficulty Walking Status",
+        x = "Difficulty Walking",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Không gặp khó khăn khi đi lại (0)**:
+- Nhóm **Không tiểu đường** chiếm 185,434.
+- Nhóm **Tiền tiểu đường** (3,346) và **Tiểu đường** (22,225) thấp hơn nhiều so với nhóm không tiểu đường.
+
+**Có khó khăn khi đi lại (1)**:
+- Nhóm **Không tiểu đường** giảm xuống còn 28,269.
+- Nhóm **Tiền tiểu đường** (1,285) và **Tiểu đường** (13,121) tăng rõ rệt so với nhóm không gặp khó khăn.
+
+**Nhận xét**:
+Khó khăn khi đi lại có liên quan đến tỷ lệ mắc **Tiểu đường** cao hơn, phản ánh tác động của các vấn đề vận động đối với nguy cơ mắc bệnh tiểu đường.
+
+
+#### 15. diabetes_012 vs sex
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$sex, data$diabetes_012))
+colnames(freq_data) <- c("sex", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$sex <- as.factor(freq_data$sex)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = sex, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Sex",
+        x = "Sex",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Giới tính 0 (Nữ)**:
+- Nhóm **Không tiểu đường** chiếm 120,959.
+- Nhóm **Tiền tiểu đường** (2,604) và **Tiểu đường** (18,411) thấp hơn đáng kể.
+
+**Giới tính 1 (Nam)**:
+- Nhóm **Không tiểu đường** giảm xuống còn 92,744.
+- Nhóm **Tiền tiểu đường** (2,027) và **Tiểu đường** (16,935) cũng thấp hơn so với nhóm nữ.
+
+**Nhận xét**:
+Nhóm nữ có tỷ lệ **Không tiểu đường** cao hơn so với nhóm nam, trong khi tỷ lệ **Tiểu đường** giữa hai giới tính tương đối gần nhau. Điều này cho thấy giới tính có thể ảnh hưởng đến nguy cơ mắc bệnh tiểu đường.
+
+
+#### 16. diabetes_012 vs age
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$age, data$diabetes_012))
+colnames(freq_data) <- c("age", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$age <- as.factor(freq_data$age)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = age, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Age",
+        x = "Age",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+- **Nhóm tuổi 1 - 5**: 
+  - Nhóm **Không tiểu đường** tăng dần từ 5,601 (tuổi 1) lên 13,055 (tuổi 5).
+  - Nhóm **Tiểu đường** rất thấp, dao động từ 278 (tuổi 1) đến 1,051 (tuổi 5).
+
+- **Nhóm tuổi 6 - 10**: 
+  - Nhóm **Không tiểu đường** đạt đỉnh ở độ tuổi 9 (26,809).
+  - Nhóm **Tiểu đường** tăng từ 1,742 (tuổi 6) lên 7,033 (tuổi 9), sau đó giảm nhẹ ở tuổi 10 (6,558).
+
+- **Nhóm tuổi 11 - 13**: 
+  - Nhóm **Không tiểu đường** giảm dần từ 17,790 (tuổi 11) xuống 13,701 (tuổi 13).
+  - Nhóm **Tiểu đường** giảm từ 5,141 (tuổi 11) xuống 3,209 (tuổi 13).
+
+**Nhận xét**:
+Tần suất mắc bệnh tiểu đường (đặc biệt nhóm **Không tiểu đường**) đạt đỉnh ở nhóm tuổi trung niên (7 - 9 tuổi) và giảm dần sau đó. Nhóm **Tiểu đường** tăng dần theo độ tuổi, phản ánh nguy cơ tăng cao khi tuổi tăng.
+
+
+#### 17. diabetes_012 vs education
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$education, data$diabetes_012))
+colnames(freq_data) <- c("education", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$education <- as.factor(freq_data$education)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = education, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Education Level",
+        x = "Education Level",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+
+**Trình độ học vấn 1 - 3**:
+- **Mức 1**: Nhóm **Không tiểu đường** rất thấp (125), và nhóm **Tiểu đường** chỉ là 47.
+- **Mức 2**: Nhóm **Không tiểu đường** tăng lên 2,699, và nhóm **Tiểu đường** tăng lên 1,183.
+- **Mức 3**: Nhóm **Không tiểu đường** là 6,868, và nhóm **Tiểu đường** đạt 2,296.
+
+**Trình độ học vấn 4 - 6**:
+- **Mức 4**: Nhóm **Không tiểu đường** tăng mạnh lên 50,334, và nhóm **Tiểu đường** đạt 11,066.
+- **Mức 5**: Nhóm **Không tiểu đường** đạt 58,223, và nhóm **Tiểu đường** là 10,354.
+- **Mức 6**: Nhóm **Không tiểu đường** cao nhất ở mức 95,454, trong khi nhóm **Tiểu đường** đạt 10,400.
+
+**Nhận xét**:
+Tần suất **Không tiểu đường** tăng mạnh theo trình độ học vấn, đặc biệt ở mức cao hơn (4 - 6). Tỷ lệ **Tiểu đường** cũng tăng lên ở các trình độ học vấn cao, nhưng không đáng kể so với nhóm **Không tiểu đường**, cho thấy mối liên hệ giữa trình độ học vấn và khả năng quản lý sức khỏe tốt hơn.
+
+
+#### 18. diabetes_012 vs income
+
+
+```{r}
+# Tạo tần suất của các nhóm
+freq_data <- as.data.frame(table(data$income, data$diabetes_012))
+colnames(freq_data) <- c("income", "diabetes_012", "frequency")
+
+# Chuyển đổi cột thành kiểu số
+freq_data$income <- as.factor(freq_data$income)
+freq_data$diabetes_012 <- as.factor(freq_data$diabetes_012)
+
+# Vẽ biểu đồ
+ggplot(freq_data, aes(x = income, y = frequency, fill = diabetes_012)) +
+    geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+    geom_text(aes(label = frequency), 
+                        position = position_dodge(width = 0.7), 
+                        vjust = -0.5, 
+                        size = 3) +
+    labs(
+        title = "Diabetes Frequency by Income Level",
+        x = "Income Level",
+        y = "Frequency",
+        fill = "Diabetes Status"
+    ) +
+    scale_fill_manual(
+        values = c("red", "blue", "green"),
+        labels = c("No Diabetes", "Pre-Diabetes", "Diabetes")
+    ) +
+    theme_bw() +
+    theme(
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5),
+        axis.title = element_text(size = 14),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)
+    )
+```
+
+
+**Mức thu nhập thấp (1 - 3)**:
+- **Mức 1**: Nhóm **Không tiểu đường** chiếm 7,114, trong khi **Tiểu đường** chỉ đạt 2,383.
+- **Mức 2**: Nhóm **Không tiểu đường** tăng lên 8,341, và nhóm **Tiểu đường** tăng lên 3,086.
+- **Mức 3**: Nhóm **Không tiểu đường** đạt 12,005, và nhóm **Tiểu đường** là 3,568.
+
+**Mức thu nhập trung bình (4 - 6)**:
+- **Mức 4**: Nhóm **Không tiểu đường** tăng lên 15,622, trong khi nhóm **Tiểu đường** là 4,054.
+- **Mức 5**: Nhóm **Không tiểu đường** đạt 20,792, và nhóm **Tiểu đường** là 4,504.
+- **Mức 6**: Nhóm **Không tiểu đường** tăng đáng kể lên 30,431, và nhóm **Tiểu đường** đạt 5,291.
+
+**Mức thu nhập cao (7 - 8)**:
+- **Mức 7**: Nhóm **Không tiểu đường** đạt 37,219, và nhóm **Tiểu đường** là 5,265.
+- **Mức 8**: Nhóm **Không tiểu đường** cao nhất, đạt 82,179, trong khi nhóm **Tiểu đường** là 7,195.
+
+**Nhận xét**:
+Tần suất **Không tiểu đường** tăng mạnh theo mức thu nhập, đặc biệt ở các mức thu nhập cao (7 - 8). Tỷ lệ **Tiểu đường** cũng tăng lên nhưng với tốc độ chậm hơn, cho thấy mức thu nhập có thể ảnh hưởng tích cực đến khả năng quản lý sức khỏe và phòng ngừa bệnh tiểu đường.
+
