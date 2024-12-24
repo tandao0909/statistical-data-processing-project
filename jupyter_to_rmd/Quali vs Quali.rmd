@@ -1,4 +1,3 @@
-
 ```{r}
 library(janitor)
 library(tidyverse)
@@ -12,7 +11,7 @@ glimpse(data)
 ```
 
 
-#### 1. diabetes_012 vs high_bp
+## diabetes_012 vs high_bp
 
 
 ```{r}
@@ -64,7 +63,7 @@ ggplot(freq_data, aes(x = high_bp, y = frequency, fill = diabetes_012)) +
 Huyết áp cao có liên quan đến tần suất cao hơn của trạng thái **Tiểu đường** so với huyết áp bình thường.
 
 
-#### 2. diabetes_012 vs high_chol
+## diabetes_012 vs high_chol
 
 
 ```{r}
@@ -116,7 +115,7 @@ ggplot(freq_data, aes(x = high_chol, y = frequency, fill = diabetes_012)) +
 Cholesterol cao có liên quan đến tần suất cao hơn của trạng thái **Tiểu đường** so với cholesterol bình thường.
 
 
-#### 3. diabetes_012 vs chol_check
+## diabetes_012 vs chol_check
 
 
 ```{r}
@@ -168,7 +167,7 @@ ggplot(freq_data, aes(x = chol_check, y = frequency, fill = diabetes_012)) +
 Việc kiểm tra cholesterol có liên quan đến số lượng cao hơn các trường hợp **Tiền tiểu đường** và **Tiểu đường**, cho thấy tầm quan trọng của việc kiểm tra sức khỏe.
 
 
-#### 4. diabetes_012 vs smoker
+## diabetes_012 vs smoker
 
 
 ```{r}
@@ -220,7 +219,7 @@ ggplot(freq_data, aes(x = smoker, y = frequency, fill = diabetes_012)) +
 Hút thuốc có liên quan đến tần suất cao hơn của trạng thái **Tiểu đường**, tuy nhiên, số lượng người **Không tiểu đường** vẫn chiếm ưu thế trong cả hai nhóm.
 
 
-#### 5. diabetes_012 vs stroke
+## diabetes_012 vs stroke
 
 
 ```{r}
@@ -272,7 +271,7 @@ ggplot(freq_data, aes(x = stroke, y = frequency, fill = diabetes_012)) +
 Tình trạng đột quỵ có liên quan đến sự gia tăng tỷ lệ **Tiểu đường**, đặc biệt ở nhóm đã từng bị đột quỵ.
 
 
-#### 6. diabetes_012 vs heart_diseaseor_attack
+## diabetes_012 vs heart_diseaseor_attack
 
 
 ```{r}
@@ -324,7 +323,7 @@ ggplot(freq_data, aes(x = heart_diseaseor_attack, y = frequency, fill = diabetes
 Tình trạng bệnh tim hoặc đau tim có liên quan đến sự gia tăng tỷ lệ mắc **Tiểu đường**, đặc biệt ở nhóm đã từng có tiền sử bệnh tim hoặc đau tim.
 
 
-#### 7. diabetes_012 vs phys_activity
+## diabetes_012 vs phys_activity
 
 
 ```{r}
@@ -376,7 +375,7 @@ ggplot(freq_data, aes(x = phys_activity, y = frequency, fill = diabetes_012)) +
 Hoạt động thể chất có liên quan đến sự gia tăng tỷ lệ **Tiểu đường**, tuy nhiên nhóm có hoạt động thể chất cũng có tỷ lệ **Không tiểu đường** cao hơn hẳn, cho thấy lợi ích của việc tập luyện.
 
 
-#### 8. diabetes_012 vs fruits
+## diabetes_012 vs fruits
 
 
 ```{r}
@@ -428,7 +427,7 @@ ggplot(freq_data, aes(x = fruits, y = frequency, fill = diabetes_012)) +
 Việc tiêu thụ trái cây có liên quan đến sự gia tăng tỷ lệ **Tiểu đường**, nhưng đồng thời cũng cho thấy tỷ lệ **Không tiểu đường** cao hơn, phản ánh lợi ích sức khỏe của trái cây.
 
 
-#### 9. diabetes_012 vs veggies
+## diabetes_012 vs veggies
 
 
 ```{r}
@@ -480,7 +479,7 @@ ggplot(freq_data, aes(x = veggies, y = frequency, fill = diabetes_012)) +
 Tiêu thụ rau xanh có liên quan đến sự gia tăng tỷ lệ **Không tiểu đường**, phản ánh lợi ích sức khỏe của rau xanh trong việc giảm nguy cơ mắc bệnh tiểu đường.
 
 
-#### 10. diabetes_012 vs hvy_alcohol_consump
+## diabetes_012 vs hvy_alcohol_consump
 
 
 ```{r}
@@ -532,7 +531,7 @@ ggplot(freq_data, aes(x = hvy_alcohol_consump, y = frequency, fill = diabetes_01
 Tiêu thụ rượu nặng có liên quan đến tỷ lệ thấp hơn ở cả ba trạng thái, nhưng sự giảm này có thể liên quan đến số lượng người tiêu thụ rượu nặng ít hơn trong tổng số mẫu.
 
 
-#### 11. diabetes_012 vs any_healthcare
+## diabetes_012 vs any_healthcare
 
 
 ```{r}
@@ -584,7 +583,7 @@ ggplot(freq_data, aes(x = any_healthcare, y = frequency, fill = diabetes_012)) +
 Việc tiếp cận dịch vụ chăm sóc sức khỏe có liên quan đến sự gia tăng tỷ lệ **Không tiểu đường** và **Tiểu đường**, cho thấy tầm quan trọng của dịch vụ y tế trong việc phát hiện và quản lý bệnh tiểu đường.
 
 
-#### 12. diabetes_012 vs no_docbc_cost 
+## diabetes_012 vs no_docbc_cost 
 
 
 ```{r}
@@ -636,7 +635,7 @@ ggplot(freq_data, aes(x = no_docbc_cost, y = frequency, fill = diabetes_012)) +
 Chi phí cản trở việc đến bác sĩ có liên quan đến tỷ lệ **Không tiểu đường** và **Tiểu đường** thấp hơn, cho thấy rằng việc tiếp cận bác sĩ bị giới hạn bởi chi phí có thể làm giảm khả năng phát hiện và quản lý bệnh tiểu đường.
 
 
-#### 13. diabetes_012 vs gen_hlth 
+## diabetes_012 vs gen_hlth 
 
 
 ```{r}
@@ -691,7 +690,7 @@ ggplot(freq_data, aes(x = gen_hlth, y = frequency, fill = diabetes_012)) +
 Tình trạng sức khỏe tổng quát kém hơn có liên quan đến tỷ lệ **Tiểu đường** cao hơn, trong khi nhóm có sức khỏe tốt chủ yếu thuộc nhóm **Không tiểu đường**, nhấn mạnh mối quan hệ giữa sức khỏe tổng thể và nguy cơ mắc bệnh tiểu đường.
 
 
-#### 14. diabetes_012 vs diff_walk
+## diabetes_012 vs diff_walk
 
 
 ```{r}
@@ -743,7 +742,7 @@ ggplot(freq_data, aes(x = diff_walk, y = frequency, fill = diabetes_012)) +
 Khó khăn khi đi lại có liên quan đến tỷ lệ mắc **Tiểu đường** cao hơn, phản ánh tác động của các vấn đề vận động đối với nguy cơ mắc bệnh tiểu đường.
 
 
-#### 15. diabetes_012 vs sex
+## diabetes_012 vs sex
 
 
 ```{r}
@@ -795,7 +794,7 @@ ggplot(freq_data, aes(x = sex, y = frequency, fill = diabetes_012)) +
 Nhóm nữ có tỷ lệ **Không tiểu đường** cao hơn so với nhóm nam, trong khi tỷ lệ **Tiểu đường** giữa hai giới tính tương đối gần nhau. Điều này cho thấy giới tính có thể ảnh hưởng đến nguy cơ mắc bệnh tiểu đường.
 
 
-#### 16. diabetes_012 vs age
+## diabetes_012 vs age
 
 
 ```{r}
@@ -851,7 +850,7 @@ ggplot(freq_data, aes(x = age, y = frequency, fill = diabetes_012)) +
 Tần suất mắc bệnh tiểu đường (đặc biệt nhóm **Không tiểu đường**) đạt đỉnh ở nhóm tuổi trung niên (7 - 9 tuổi) và giảm dần sau đó. Nhóm **Tiểu đường** tăng dần theo độ tuổi, phản ánh nguy cơ tăng cao khi tuổi tăng.
 
 
-#### 17. diabetes_012 vs education
+## diabetes_012 vs education
 
 
 ```{r}
@@ -906,7 +905,7 @@ ggplot(freq_data, aes(x = education, y = frequency, fill = diabetes_012)) +
 Tần suất **Không tiểu đường** tăng mạnh theo trình độ học vấn, đặc biệt ở mức cao hơn (4 - 6). Tỷ lệ **Tiểu đường** cũng tăng lên ở các trình độ học vấn cao, nhưng không đáng kể so với nhóm **Không tiểu đường**, cho thấy mối liên hệ giữa trình độ học vấn và khả năng quản lý sức khỏe tốt hơn.
 
 
-#### 18. diabetes_012 vs income
+## diabetes_012 vs income
 
 
 ```{r}
