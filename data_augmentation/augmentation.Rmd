@@ -83,7 +83,6 @@ cat("\nĐã lưu dữ liệu oversampled vào 'oversampled_data.csv'\n")
 
 ```{r}
 library(caret)
-library(smotefamily)
 library(dplyr)
 
 # Tính số lượng mẫu cần tăng cường
@@ -120,10 +119,10 @@ smote_1 <- SMOTE(X_1, y_1, K = 5, dup_size = ceiling(required_1 / nrow(X_1)))
 smote_2 <- SMOTE(X_2, y_2, K = 5, dup_size = ceiling(required_2 / nrow(X_2)))
 
 # Lấy dữ liệu đã tăng cường
-X_1_smote <- smote_1$data[, -ncol(smote_1$data)]
+X_1_smote <- round(smote_1$data[, -ncol(smote_1$data)])
 y_1_smote <- smote_1$data[[ncol(smote_1$data)]]
 
-X_2_smote <- smote_2$data[, -ncol(smote_2$data)]
+X_2_smote <- round(smote_2$data[, -ncol(smote_2$data)])
 y_2_smote <- smote_2$data[[ncol(smote_2$data)]]
 
 # Kết hợp lại dữ liệu
