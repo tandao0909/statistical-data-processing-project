@@ -1,0 +1,893 @@
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(MASS)
+library(janitor)
+library(dplyr)
+library(pROC)
+library(irr)
+library(reshape2)
+library(caret)
+
+# Useful function: Cross-validation for LDA and QDA
+cross_validate <- function(model_formula, data, k = 5, method = "lda") {
+    set.seed(123) # Set seed for reproducibility
+    
+    # Create k-folds
+    folds <- sample(rep(1:k, length.out = nrow(data)))
+    
+    # Initialize a list to store results and models
+    results <- list()
+    models <- list()
+    
+    # Perform cross-validation
+    for (i in 1:k) {
+        # Split data into training and testing sets
+        train_data <- data[folds != i, ]
+        test_data <- data[folds == i, ]
+        
+        # Train the model
+        model <- if (method == "lda") {
+            lda(formula = model_formula, data = train_data)
+        } else if (method == "qda") {
+            qda(formula = model_formula, data = train_data)
+        } else {
+            stop("Unsupported method. Use 'lda' or 'qda'.")
+        }
+        
+        # Predict on the testing set
+        predictions <- predict(model, test_data)$class
+        
+        # Calculate metrics
+        confusion <- table(predictions, test_data$diabetes_012)
+        accuracy <- sum(diag(confusion)) / sum(confusion)
+        precision <- diag(confusion) / rowSums(confusion)
+        precision[is.na(precision)] <- 0
+        recall <- diag(confusion) / colSums(confusion)
+        recall[is.na(recall)] <- 0
+        f1 <- 2 * (precision * recall) / (precision + recall)
+        f1[is.na(f1)] <- 0
+        
+        # Calculate kappa
+        confusion_df <- as.data.frame(as.table(confusion))
+        kappa <- kappam.fleiss(confusion_df)$value
+        
+        # Store the result and model
+        results[[i]] <- list(
+            accuracy = accuracy,
+            precision = precision,
+            recall = recall,
+            f1 = f1,
+            kappa = kappa
+        )
+        models[[i]] <- model
+    }
+    
+    return(list(models = models, results = results))
+}
+
+# Multi-class evaluation
+eval_multi_class <- function(conf_matrix) {
+    cc <- sum(diag(conf_matrix))
+    sc <- sum(conf_matrix)
+    pp <- colSums(conf_matrix)
+    tt <- rowSums(conf_matrix)
+    
+    prec <- diag(conf_matrix) / pp
+    prec[is.na(prec)] <- 0
+    recall <- diag(conf_matrix) / tt
+    recall[is.na(recall)] <- 0
+    macro_prec <- mean(prec, na.rm = TRUE)
+    macro_recall <- mean(recall, na.rm = TRUE)
+    macro_f1 <- 2 * macro_prec * macro_recall / (macro_prec + macro_recall)
+    acc <- cc / sc
+    kap <- (cc * sc - sum(pp * tt)) / (sc^2 - sum(pp * tt))
+    
+    return(list(Precision = prec, Recall = recall, Accuracy = acc, Kappa = kap, Macro_F1 = macro_f1))
+}
+
+# Evaluate models with enhanced flexibility
+evaluate_models <- function(train_data, test_data) {
+    # LDA cross-validation
+    lda_results <- cross_validate(diabetes_012 ~ ., train_data, method = "lda")
+    lda_avg_results <- sapply(lda_results$results, function(res) sapply(res, mean))
+    
+    # QDA cross-validation
+    qda_results <- cross_validate(diabetes_012 ~ ., train_data, method = "qda")
+    qda_avg_results <- sapply(qda_results$results, function(res) sapply(res, mean))
+    
+    # Determine the best model based on F1 score
+    best_model <- ifelse(mean(lda_avg_results["f1", ]) > mean(qda_avg_results["f1", ]), "LDA", "QDA")
+    
+    # Train final models
+    final_lda_model <- lda(diabetes_012 ~ ., data = train_data)
+    final_qda_model <- qda(diabetes_012 ~ ., data = train_data)
+    
+    # Predict on test data
+    lda_predictions <- predict(final_lda_model, test_data)$class
+    qda_predictions <- predict(final_qda_model, test_data)$class
+    
+    # Create confusion matrices
+    lda_confusion <- table(test_data$diabetes_012, lda_predictions)
+    qda_confusion <- table(test_data$diabetes_012, qda_predictions)
+    
+    # Evaluate metrics
+    lda_metrics <- eval_multi_class(lda_confusion)
+    qda_metrics <- eval_multi_class(qda_confusion)
+    
+    # Compile results
+    results <- data.frame(
+        Metric = c("Accuracy", "Precision", "Recall", "F1", "Kappa"),
+        LDA = c(lda_metrics$Accuracy, mean(lda_metrics$Precision, na.rm = TRUE), mean(lda_metrics$Recall, na.rm = TRUE), lda_metrics$Macro_F1, lda_metrics$Kappa),
+        QDA = c(qda_metrics$Accuracy, mean(qda_metrics$Precision, na.rm = TRUE), mean(qda_metrics$Recall, na.rm = TRUE), qda_metrics$Macro_F1, qda_metrics$Kappa)
+    )
+    
+    # Visualize results
+    metrics_data <- melt(results, id.vars = "Metric")
+    
+    ggplot(metrics_data, aes(x = Metric, y = value, fill = variable)) +
+        geom_bar(stat = "identity", position = "dodge") +
+        labs(title = "Performance Metrics for LDA and QDA Models",
+             x = "Metric",
+             y = "Value") +
+        theme_minimal()
+    
+    return(list(results = results, lda_predictions = lda_predictions, qda_predictions = qda_predictions))
+}
+
+plot_confusion_matrix <- function(conf_matrix, model_name) {
+    conf_matrix_df <- as.data.frame(conf_matrix)
+    colnames(conf_matrix_df) <- c("Actual", "Predicted", "Freq")
+    
+    ggplot(conf_matrix_df, aes(x = Actual, y = Predicted, fill = Freq)) +
+        geom_tile() +
+        geom_text(aes(label = Freq), color = "white") +
+        scale_fill_gradient(low = "lightblue", high = "lightcoral") +
+        labs(title = paste("Confusion Matrix -", model_name, "Predictions"), x = "Actual", y = "Predicted") +
+        theme_minimal()
+}
+```
+
+
+```{r}
+train_data = read.csv("data/train_data.csv")
+test_data = read.csv("data/test_data.csv")
+```
+
+
+```{r}
+glimpse(train_data)
+```
+
+
+## Data Preprocessing
+
+
+```{r}
+train_data <- train_data |> mutate(across(everything(), as.factor))
+test_data <- test_data |> mutate(across(everything(), as.factor))
+```
+
+
+```{r}
+glimpse(train_data)
+```
+
+
+```{r}
+print(table(train_data$diabetes_012))
+print(table(test_data$diabetes_012))
+```
+
+
+## Modeling
+
+
+### Thử trên data gốc
+
+
+```{r}
+results = evaluate_models(train_data, test_data)
+```
+
+
+```{r}
+conf_matrix <- table(test_data$diabetes_012, results$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+```{r}
+conf_matrix <- table(test_data$diabetes_012, results$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### Thử trên Data Oversampling
+
+
+```{r}
+oversampling_data <- read.csv("data/oversampled_data.csv")
+oversampling_data <- oversampling_data |> mutate(across(everything(), as.factor))
+
+glimpse(oversampling_data)
+```
+
+
+```{r}
+table(oversampling_data$diabetes_012)
+```
+
+
+#### Train với thông số cơ bản
+
+
+```{r}
+oversampling_results <- evaluate_models(oversampling_data, test_data)
+```
+
+
+```{r}
+conf_matrix <- table(test_data$diabetes_012, oversampling_results$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+```{r}
+conf_matrix <- table(test_data$diabetes_012, oversampling_results$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### Thử trên Data Undersampling
+
+
+```{r}
+undersampling_data <- read.csv("data/undersampled_data.csv")
+undersampling_data <- undersampling_data |> mutate(across(everything(), as.factor))
+
+glimpse(undersampling_data)
+
+table(undersampling_data$diabetes_012)
+```
+
+
+#### Train với thông số cơ bản
+
+
+```{r}
+train_without_cross <- function(train_data, test_data) {
+    # Train LDA model on train_data
+    lda_model <- lda(diabetes_012 ~ ., data = train_data)
+    
+    # Predict on train_data
+    lda_predictions_train <- predict(lda_model, train_data)$class
+    lda_pred_probs_train <- predict(lda_model, train_data)$posterior
+    
+    # Calculate confusion matrix and metrics for training data
+    lda_conf_matrix_train <- table(train_data$diabetes_012, lda_predictions_train)
+    lda_metrics_train <- eval_multi_class(lda_conf_matrix_train)
+    
+    # Print metrics for training data
+    cat("LDA Training Metrics:\n")
+    print(lda_metrics_train)
+    
+    # Predict on test_data
+    lda_predictions <- predict(lda_model, test_data)$class
+    lda_pred_probs <- predict(lda_model, test_data)$posterior
+    
+    # Train QDA model on train_data
+    qda_model <- qda(diabetes_012 ~ ., data = train_data)
+    
+    # Predict on train_data
+    qda_predictions_train <- predict(qda_model, train_data)$class
+    qda_pred_probs_train <- predict(qda_model, train_data)$posterior
+    
+    # Calculate confusion matrix and metrics for training data
+    qda_conf_matrix_train <- table(train_data$diabetes_012, qda_predictions_train)
+    qda_metrics_train <- eval_multi_class(qda_conf_matrix_train)
+    
+    # Print metrics for training data
+    cat("QDA Training Metrics:\n")
+    print(qda_metrics_train)
+    
+    # Predict on test_data
+    qda_predictions <- predict(qda_model, test_data)$class
+    qda_pred_probs <- predict(qda_model, test_data)$posterior
+    
+    # Return predictions and probabilities for both models
+    return(list(
+        lda_predictions = lda_predictions,
+        lda_pred_probs = lda_pred_probs,
+        qda_predictions = qda_predictions,
+        qda_pred_probs = qda_pred_probs
+    ))
+}
+
+undersampling_results <- train_without_cross(undersampling_data, test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(test_data$diabetes_012, undersampling_results$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(test_data$diabetes_012, undersampling_results$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### Thử trên Data SMOTE Sampling
+
+
+```{r}
+smote_data <- read.csv("data/smote_augmented_data_80_percent.csv")
+smote_data <- smote_data |> mutate(across(everything(), as.factor))
+
+glimpse(smote_data)
+table(smote_data$diabetes_012)
+```
+
+
+### Train với thông số cơ bản
+
+
+```{r}
+smote_results <- evaluate_models(smote_data, test_data)
+```
+
+
+```{r}
+conf_matrix <- table(test_data$diabetes_012, smote_results$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+```{r}
+conf_matrix <- table(test_data$diabetes_012, smote_results$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+## Modeling With Binary 0 & {1, 2}
+
+
+```{r}
+convert_to_binary <- function(data) {
+    data |> mutate(diabetes_012 = ifelse(diabetes_012 %in% c(1, 2), 1, ifelse(diabetes_012 == 0, 0, diabetes_012)))
+}
+
+
+binary_train_data <- convert_to_binary(train_data)
+binary_oversampling_data <- convert_to_binary(oversampling_data)
+binary_undersampling_data <- convert_to_binary(undersampling_data)
+binary_smote_data <- convert_to_binary(smote_data)
+binary_test_data <- convert_to_binary(test_data)
+```
+
+
+```{r}
+table(binary_train_data$diabetes_012)
+table(binary_test_data$diabetes_012)
+```
+
+
+### Train Data
+
+
+```{r}
+binary_results <- evaluate_models(binary_train_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, binary_results$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, binary_results$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### Oversampling Data
+
+
+```{r}
+oversampling_results_binary <- evaluate_models(binary_oversampling_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, oversampling_results_binary$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, oversampling_results_binary$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### Undersampling Data
+
+
+```{r}
+undersampling_results_binary <- evaluate_models(binary_undersampling_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, undersampling_results_binary$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, undersampling_results_binary$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### SMOTE Data
+
+
+```{r}
+smote_results_binary <- evaluate_models(binary_smote_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, smote_results_binary$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, smote_results_binary$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+## Modeling with Binary 1 & {0, 2}
+
+Class 0 và 2 sẽ được biến đổi thành class 1 và class 1 sẽ được chỉnh thành 0.
+
+```{r}
+convert_to_binary <- function(data) {
+    data |> mutate(diabetes_012 = ifelse(diabetes_012 %in% c(0, 2), 1, ifelse(diabetes_012 == 1, 0, diabetes_012)))
+}
+
+binary_train_data <- convert_to_binary(train_data)
+binary_oversampling_data <- convert_to_binary(oversampling_data)
+binary_undersampling_data <- convert_to_binary(undersampling_data)
+binary_smote_data <- convert_to_binary(smote_data)
+binary_test_data <- convert_to_binary(test_data)
+```
+
+
+```{r}
+table(binary_train_data$diabetes_012)
+table(binary_test_data$diabetes_012)
+```
+
+
+### Train Data
+
+
+```{r}
+binary_results <- evaluate_models(binary_train_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, binary_results$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, binary_results$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### Oversampling Data
+
+
+```{r}
+oversampling_results_binary <- evaluate_models(binary_oversampling_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, oversampling_results_binary$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, oversampling_results_binary$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### Undersampling Data
+
+
+```{r}
+undersampling_results_binary <- train_without_cross(binary_undersampling_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, undersampling_results_binary$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, undersampling_results_binary$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### SMOTE Data
+
+
+```{r}
+smote_results_binary <- evaluate_models(binary_smote_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, smote_results_binary$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, smote_results_binary$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+## Modeling with Binary 2 & {0, 1}
+
+Class 0 và 1 biến đổi thành class 1 và class 2 được biến đổi thành class 1
+
+```{r}
+convert_to_binary <- function(data) {
+    data |> mutate(diabetes_012 = ifelse(diabetes_012 %in% c(0, 1), 0, ifelse(diabetes_012 == 2, 1, diabetes_012)))
+}
+
+binary_train_data <- convert_to_binary(train_data)
+binary_oversampling_data <- convert_to_binary(oversampling_data)
+binary_undersampling_data <- convert_to_binary(undersampling_data)
+binary_smote_data <- convert_to_binary(smote_data)
+binary_test_data <- convert_to_binary(test_data)
+```
+
+
+```{r}
+table(binary_train_data$diabetes_012)
+table(binary_test_data$diabetes_012)
+```
+
+
+### Train Data
+
+
+```{r}
+binary_results <- evaluate_models(binary_train_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, binary_results$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, binary_results$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### Oversampling Data
+
+
+```{r}
+oversampling_results_binary <- evaluate_models(binary_oversampling_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, oversampling_results_binary$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, oversampling_results_binary$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### Undersampling Data
+
+
+```{r}
+undersampling_results_binary <- evaluate_models(binary_undersampling_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, undersampling_results_binary$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, undersampling_results_binary$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
+
+
+### SMOTE Data
+
+
+```{r}
+smote_results_binary <- evaluate_models(binary_undersampling_data, binary_test_data)
+```
+
+
+Cho LDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, smote_results_binary$lda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "LDA")
+```
+
+
+Cho QDA
+
+
+```{r}
+conf_matrix <- table(binary_test_data$diabetes_012, smote_results_binary$qda_predictions)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "QDA")
+```
