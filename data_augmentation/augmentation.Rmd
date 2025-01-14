@@ -82,7 +82,6 @@ cat("\nĐã lưu dữ liệu oversampled vào 'oversampled_data.csv'\n")
 
 
 ```{r}
-# Nạp thư viện
 library(caret)
 library(smotefamily)
 library(dplyr)
@@ -133,11 +132,11 @@ y_combined <- c(rep(0, nrow(X_0)), as.numeric(y_1_smote), as.numeric(y_2_smote))
 
 final_data <- cbind(X_combined, diabetes_012 = y_combined)
 
-# Lưu dữ liệu đã tăng cường
+
 write.csv(final_data, "balanced_data_80_percent.csv", row.names = FALSE)
 cat("\nDữ liệu đã lưu vào file 'balanced_data_80_percent.csv'")
 
-# Phân phối nhãn sau khi tăng cường
+
 cat("\nPhân phối nhãn sau SMOTE:\n")
 print(table(y_combined))
 
@@ -146,7 +145,7 @@ print(table(y_combined))
 
 
 ```{r}
-# Plot distribution
+# Phân phối sau khi tăng cường
 library(ggplot2)
 
 ggplot(final_data, aes(x = factor(diabetes_012))) +
