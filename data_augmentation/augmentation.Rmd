@@ -17,7 +17,7 @@ library(smotefamily)
 ```
 
 ```{r}
-file_path <- file.path("D:/Xử Lý Số Liệu Thống Kê/Final_Project_Group17/diabetes_012_health_indicators_BRFSS2015.csv")
+file_path <- file.path("D:/Xử Lý Số Liệu Thống Kê/data_augmentation/train_data/train_data.csv")
 data <- read.csv(file_path)
 data
 ```
@@ -27,7 +27,7 @@ Thực hiện undersampling và oversampling
 
 ```{r}
 # kiểm tra data imbalance
-target_distribution <- table(data$Diabetes_012)
+target_distribution <- table(data$diabetes_012)
 print(target_distribution)
 ```
 
@@ -43,7 +43,7 @@ resample_data <- function(df, n, replace = FALSE) {
 
 
 # cột chứa nhãn (target) và các đặc trưng (features)
-target_column <- "Diabetes_012"
+target_column <- "diabetes_012"
 X <- data[, !names(data) %in% c(target_column)]
 y <- data[[target_column]]
 
@@ -82,76 +82,64 @@ cat("\nĐã lưu dữ liệu oversampled vào 'oversampled_data.csv'\n")
 
 
 ```{r}
-# Load các thư viện cần thiết
+# Nạp thư viện
+library(caret)
+library(smotefamily)
 library(dplyr)
-library(DMwR2)  # Thư viện SMOTE
 
-# Cấu hình dữ liệu
-original_data <- data
-quantitative_columns <- c("BMI", "MentHlth", "PhysHlth")  # Cột định lượng
-categorical_columns <- setdiff(names(data), c(quantitative_columns, target_column))  # Cột định tính
-target_column <- "Diabetes_012"  # Cột mục tiêu
+# Tính số lượng mẫu cần tăng cường
+majority_count <- sum(data$diabetes_012 == 0)
+augmentation_target <- round(majority_count * 0.8)
 
-# Dữ liệu ban đầu
-X <- data[quantitative_columns]
-y <- data[[target_column]]
+# Tách dữ liệu gốc theo từng nhãn
+data_0 <- data[data$diabetes_012 == 0, ]
+data_1 <- data[data$diabetes_012 == 1, ]
+data_2 <- data[data$diabetes_012 == 2, ]
 
-# Phân phối nhãn ban đầu
-label_counts <- table(y)
-majority_count <- label_counts["0"]
-augmentation_target <- as.integer(majority_count * 0.8)
+# One-hot encoding cho dữ liệu nhãn 1 và 2
+categorical_columns <- setdiff(names(data), "diabetes_012")
+one_hot_encoded <- dummyVars(~ ., data = data[, categorical_columns])
+X_encoded <- predict(one_hot_encoded, newdata = data[, categorical_columns])
+X_encoded <- as.data.frame(X_encoded)
 
-# Hàm tăng cường dữ liệu định tính
-augment_categorical_data <- function(original_data, target_count) {
-  current_count <- nrow(original_data)
-  if (target_count <= current_count) return(original_data)
-  
-  samples_needed <- target_count - current_count
-  augmented_samples <- original_data[sample(current_count, samples_needed, replace = TRUE), ]
-  rbind(original_data, augmented_samples)
-}
+X_1 <- X_encoded[data$diabetes_012 == 1, ]
+X_2 <- X_encoded[data$diabetes_012 == 2, ]
+X_0 <- X_encoded[data$diabetes_012 == 0, ]
 
-# 1. Tăng dữ liệu bằng SMOTE trên toàn bộ dữ liệu định lượng
-smote_result <- SMOTE(X, y, K = 5, dup_size = 0)
-X_smote <- as.data.frame(smote_result$data)
-names(X_smote) <- c(quantitative_columns, target_column)
-y_smote <- X_smote[[target_column]]
+# Gán nhãn mục tiêu
+y_1 <- as.factor(data_1$diabetes_012)
+y_2 <- as.factor(data_2$diabetes_012)
 
-# 2. Kết hợp SMOTE và Augmentation
-# Tạo tập dữ liệu tăng cường cho Diabetes_012 == 1
-smote_data_1 <- X_smote %>% filter(Diabetes_012 == 1) %>% select(all_of(quantitative_columns))
-categorical_augmented_1 <- augment_categorical_data(
-  data %>% filter(Diabetes_012 == 1) %>% select(all_of(categorical_columns)),
-  nrow(smote_data_1)
-)
+# Tính số mẫu cần bổ sung cho mỗi nhãn
+required_1 <- augmentation_target - nrow(data_1)
+required_2 <- augmentation_target - nrow(data_2)
 
-if (nrow(smote_data_1) != nrow(categorical_augmented_1)) {
-  stop("Kích thước của SMOTE và dữ liệu định tính được tăng cường không khớp cho Diabetes_012 == 1!")
-}
+# Áp dụng SMOTE cho nhãn 1
+smote_1 <- SMOTE(X_1, y_1, K = 5, dup_size = ceiling(required_1 / nrow(X_1)))
 
-combined_data_1 <- bind_cols(smote_data_1, categorical_augmented_1) %>% mutate(Diabetes_012 = 1)
+# Áp dụng SMOTE cho nhãn 2
+smote_2 <- SMOTE(X_2, y_2, K = 5, dup_size = ceiling(required_2 / nrow(X_2)))
 
-# Tạo tập dữ liệu tăng cường cho Diabetes_012 == 2
-smote_data_2 <- X_smote %>% filter(Diabetes_012 == 2) %>% select(all_of(quantitative_columns))
-categorical_augmented_2 <- augment_categorical_data(
-  data %>% filter(Diabetes_012 == 2) %>% select(all_of(categorical_columns)),
-  nrow(smote_data_2)
-)
+# Lấy dữ liệu đã tăng cường
+X_1_smote <- smote_1$data[, -ncol(smote_1$data)]
+y_1_smote <- smote_1$data[[ncol(smote_1$data)]]
 
-if (nrow(smote_data_2) != nrow(categorical_augmented_2)) {
-  stop("Kích thước của SMOTE và dữ liệu định tính được tăng cường không khớp cho Diabetes_012 == 2!")
-}
+X_2_smote <- smote_2$data[, -ncol(smote_2$data)]
+y_2_smote <- smote_2$data[[ncol(smote_2$data)]]
 
-combined_data_2 <- bind_cols(smote_data_2, categorical_augmented_2) %>% mutate(Diabetes_012 = 2)
+# Kết hợp lại dữ liệu
+X_combined <- rbind(X_0, X_1_smote, X_2_smote)
+y_combined <- c(rep(0, nrow(X_0)), as.numeric(y_1_smote), as.numeric(y_2_smote))
 
-# Kết hợp toàn bộ dữ liệu
-final_data <- data %>%
-  filter(Diabetes_012 == 0) %>%
-  rbind(combined_data_1, combined_data_2)
+final_data <- cbind(X_combined, diabetes_012 = y_combined)
 
-# Xuất dữ liệu ra file CSV
+# Lưu dữ liệu đã tăng cường
 write.csv(final_data, "balanced_data_80_percent.csv", row.names = FALSE)
-cat("\nĐã lưu dữ liệu vào file 'balanced_data_80_percent.csv'\n")
+cat("\nDữ liệu đã lưu vào file 'balanced_data_80_percent.csv'")
+
+# Phân phối nhãn sau khi tăng cường
+cat("\nPhân phối nhãn sau SMOTE:\n")
+print(table(y_combined))
 
 
 ```
@@ -161,7 +149,7 @@ cat("\nĐã lưu dữ liệu vào file 'balanced_data_80_percent.csv'\n")
 # Plot distribution
 library(ggplot2)
 
-ggplot(final_data, aes(x = factor(Diabetes_012))) +
+ggplot(final_data, aes(x = factor(diabetes_012))) +
   geom_bar(fill = "steelblue") +
   labs(title = paste("Bar Chart of", target_column),
        x = target_column,
