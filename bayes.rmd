@@ -1,0 +1,838 @@
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(janitor)
+library("e1071")
+library(irr)
+library(PRROC)
+library(reshape2)
+TARGET_COLUMN <- "diabetes_012"
+SEED <- 123
+K <- 5
+```
+
+
+```{r}
+process_data <- function(data) {
+  # Clean column names
+  data <- clean_names(data)
+
+  # Hàm để phân loại BMI
+  categorize_bmi <- function(bmi) {
+    if (bmi < 18.5) {
+      return("Underweight")
+    } else if (bmi >= 18.5 & bmi < 24.9) {
+      return("Normal weight")
+    } else if (bmi >= 25 & bmi < 29.9) {
+      return("Overweight")
+    } else if (bmi >= 30 & bmi < 34.9) {
+      return("Obesity class 1")
+    } else if (bmi >= 35 & bmi < 39.9) {
+      return("Obesity class 2")
+    } else {
+      return("Obesity class 3")
+    }
+  }
+
+  # Tạo cột mới bmi_category cho dataframe data
+  data$bmi_category <- sapply(data$bmi, categorize_bmi)
+  # Chuyển đổi bmi_category thành factor với các levels cụ thể
+  data$bmi_category <- factor(data$bmi_category, levels = c("Underweight", "Normal weight", "Overweight", "Obesity class 1", "Obesity class 2", "Obesity class 3"))
+
+  # Chuyển đổi các biến không định lượng thành factor
+  quantitative_vars <- c("phys_hlth")
+
+  non_quantitative_vars <- setdiff(names(data), quantitative_vars)
+  data[non_quantitative_vars] <- lapply(data[non_quantitative_vars], factor)
+
+  return(data)
+}
+
+```
+
+
+```{r}
+train_test_split <- function(data, train_ratio = 0.8) {
+  # Đặt seed để đảm bảo tính tái lập
+  set.seed(SEED)
+  train_indices <- sample(seq_len(nrow(data)), size = floor(train_ratio * nrow(data)), replace = FALSE)
+  train_data <- data[train_indices, ]
+  test_data <- data[-train_indices, ]
+  res <- list(
+    train_data = train_data,
+    test_data = test_data
+  )
+  return(res)
+}
+
+```
+
+
+```{r}
+bayes_cross_validate <- function(data, k = K) {
+  # Đặt seed để đảm bảo tính tái lập
+  set.seed(SEED)
+  # Create k-folds
+  folds <- sample(rep(1:k, length.out = nrow(data)))
+
+  # Initialize a list to store results and models
+  results <- list()
+  models <- list()
+
+  # Perform cross-validation
+  for (i in 1:k) {
+    # Split data into training and testing sets
+    train_data <- data[folds != i, ]
+    test_data <- data[folds == i, ]
+
+    # Train the model on the training set
+    model <- naiveBayes(formula = as.formula(paste(TARGET_COLUMN, "~ .")), data = train_data)
+
+    # Predict on the testing set
+    predictions <- predict(model, test_data)
+
+    # Calculate metrics
+    confusion <- table(predictions, test_data$diabetes_012)
+    accuracy <- sum(diag(confusion)) / sum(confusion)
+    precision <- diag(confusion) / rowSums(confusion)
+    precision[is.nan(precision)] <- 0
+    recall <- diag(confusion) / colSums(confusion)
+    recall[is.nan(recall)] <- 0
+    f1 <- 2 * (precision * recall) / (precision + recall)
+    f1[is.nan(f1)] <- 0
+
+    # Convert confusion matrix to data frame for kappam.fleiss
+    confusion_df <- as.data.frame(as.table(confusion))
+    kappa <- kappam.fleiss(confusion_df)$value
+
+    # Store the result and model
+    results[[i]] <- list(
+      accuracy = accuracy,
+      precision = precision,
+      recall = recall,
+      f1 = f1,
+      kappa = kappa
+    )
+    models[[i]] <- model
+  }
+
+  return(list(models = models, results = results))
+}
+
+```
+
+
+```{r}
+eval_multi_class <- function(x) {
+  cc <- sum(diag(x))
+  sc <- sum(x)
+  pp <- colSums(x)
+  tt <- rowSums(x)
+
+  precision <- diag(x) / colSums(x)
+  recall <- diag(x) / rowSums(x)
+  macro_precision <- mean(precision)
+  macro_recall <- mean(recall)
+  macro_f1 <- 2 * macro_precision * macro_recall / (1 / macro_precision + 1 / macro_recall)
+  accuracy <- cc / sc
+  kappa <- (cc * sc - sum(pp * tt)) / (sc^2 - sum(pp * tt))
+  return(list(
+    Precision = precision, Recall = recall, Accuracy = accuracy, Kappa = kappa,
+    Macro_F1 = macro_f1
+  ))
+}
+
+```
+
+
+```{r}
+evaluate_models <- function(train_data, test_data) {
+  # Apply cross-validation on train_data for Naive Bayes
+  bayes_results <- bayes_cross_validate(train_data)
+  bayes_avg_results <- sapply(bayes_results$results, function(res) sapply(res, mean))
+
+  # Combine results into a data frame
+  avg_results <- data.frame(
+    Metric = c("Accuracy", "Precision", "Recall", "F1", "Kappa"),
+    bayes = bayes_avg_results
+  )
+
+  # Print the results as a table
+  print(avg_results)
+
+  # Train the bayes model on the entire training data
+  final_bayes_model <- naiveBayes(formula = as.formula(paste(TARGET_COLUMN, "~ .")), data = train_data)
+
+  # Predict on the test data using the model train on the full dataset
+  bayes_predictions <- predict(final_bayes_model, test_data)
+
+  # Get predicted probabilities
+  bayes_pred_probs <- predict(final_bayes_model, test_data, type = "raw")
+
+  # Create confusion matrix
+  bayes_confusion <- table(test_data$diabetes_012, bayes_predictions)
+
+  # Calculate metrics for bayes using eval_multi_class
+  bayes_metrics <- eval_multi_class(bayes_confusion)
+
+  # Create a data frame with the results
+  results <- data.frame(
+    Metric = c("Accuracy", "Precision", "Recall", "F1", "Kappa"),
+    bayes = c(bayes_metrics$Accuracy, mean(bayes_metrics$Precision, na.rm = TRUE), mean(bayes_metrics$Recall, na.rm = TRUE), bayes_metrics$Macro_F1, bayes_metrics$Kappa)
+  )
+
+  # Plot the metrics
+  metrics_data <- melt(results, id.vars = "Metric")
+
+  ggplot(metrics_data, aes(x = Metric, y = value, fill = variable)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(
+      title = "Performance Metrics for Naive Bayes Models",
+      x = "Metric",
+      y = "Value"
+    ) +
+    theme_minimal()
+
+  # Return results, predicted probabilities, and predictions
+  return(list(results = results, bayes_pred_probs = bayes_pred_probs, bayes_predictions = bayes_predictions))
+}
+
+```
+
+
+```{r}
+plot_confusion_matrix <- function(conf_matrix, model_name) {
+  conf_matrix_df <- as.data.frame(conf_matrix)
+  colnames(conf_matrix_df) <- c("Actual", "Predicted", "Freq")
+
+  ggplot(conf_matrix_df, aes(x = Actual, y = Predicted, fill = Freq)) +
+    geom_tile() +
+    geom_text(aes(label = Freq), color = "white") +
+    scale_fill_gradient(low = "lightblue", high = "lightcoral") +
+    labs(title = paste("Confusion Matrix -", model_name, "Predictions"), x = "Actual", y = "Predicted") +
+    theme_minimal()
+}
+
+```
+
+
+## Data Preprocessing
+
+
+
+```{r}
+train_data <- read.csv("data/train_data.csv")
+test_data <- read.csv("data/test_data.csv")
+
+```
+
+
+```{r}
+glimpse(train_data)
+
+```
+
+
+```{r}
+train_data <- train_data |> mutate(across(everything(), as.factor))
+test_data <- test_data |> mutate(across(everything(), as.factor))
+
+```
+
+
+```{r}
+glimpse(train_data)
+
+```
+
+
+```{r}
+print(table(train_data$diabetes_012))
+print(table(test_data$diabetes_012))
+
+```
+
+
+# Modeling
+
+
+
+### Work with the original dataset
+
+
+
+```{r}
+results <- evaluate_models(train_data = train_data, test_data = test_data)
+
+```
+
+
+- Accuracy: Độ chính xác của mô hình ở mức chấp nhận được (khoảng 80%).
+- Precision: Precision thấp cho thấy mức dương tính giả khá cao.
+- Recall: Tỷ lệ nhận diện ra các lớp dương tính (1 và 2) không quá tốt (khoảng 46%)
+- F1: Mô hình không quá tốt trong F1, chỉ khoảng 44%
+- Kappa (Cohen's Kappa): Giá trị âm cho thấy mô hình không dự đoán tốt hơn quá nhiều so với dự đoán ngẫu nhiên
+
+
+
+```{r}
+confusion_matrix <- table(test_data$diabetes_012, results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+plot_confusion_matrix(conf_matrix = confusion_matrix, model_name = "Naive Bayes")
+
+```
+
+
+## Work with Oversampling data
+
+
+
+```{r}
+oversampling_data <- read.csv("data/oversampled_data.csv")
+oversampling_data <- oversampling_data |> mutate(across(everything(), as.factor))
+
+glimpse(oversampling_data)
+
+```
+
+
+```{r}
+table(oversampling_data$diabetes_012)
+
+```
+
+
+```{r}
+oversampling_results <- evaluate_models(oversampling_data, test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(test_data$diabetes_012, oversampling_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+plot_confusion_matrix(conf_matrix = confusion_matrix, model_name = "Naive Bayes")
+
+```
+
+
+#### Tăng Recall cho class 1 và class 2
+
+
+
+```{r}
+calculate_optimal_thresholds <- function(probs, test_data) {
+  # Tính PR Curve cho từng lớp (One-vs-Rest)
+  pr_class0 <- pr.curve(scores.class0 = probs[, 1], weights.class0 = (test_data$diabetes_012 == 0), curve = TRUE)
+  pr_class1 <- pr.curve(scores.class0 = probs[, 2], weights.class0 = (test_data$diabetes_012 == 1), curve = TRUE)
+  pr_class2 <- pr.curve(scores.class0 = probs[, 3], weights.class0 = (test_data$diabetes_012 == 2), curve = TRUE)
+
+  # Vẽ đồ thị Precision-Recall
+  plot(pr_class0, col = "blue", main = "PR Curve - Class 0")
+  plot(pr_class1, col = "red", add = TRUE)
+  plot(pr_class2, col = "green", add = TRUE)
+  legend("bottomleft", legend = c("Class 0", "Class 1", "Class 2"), col = c("blue", "red", "green"), lty = 1)
+
+  # Tính F1-Score cho từng lớp
+  precision0 <- pr_class0$curve[, 1]
+  recall0 <- pr_class0$curve[, 2]
+  f1_class0 <- 2 * (precision0 * recall0) / (precision0 + recall0)
+  optimal_threshold0 <- pr_class0$curve[which.max(f1_class0), 3]
+
+  precision1 <- pr_class1$curve[, 1]
+  recall1 <- pr_class1$curve[, 2]
+  f1_class1 <- 2 * (precision1 * recall1) / (precision1 + recall1)
+  optimal_threshold1 <- pr_class1$curve[which.max(f1_class1), 3]
+
+  precision2 <- pr_class2$curve[, 1]
+  recall2 <- pr_class2$curve[, 2]
+  f1_class2 <- 2 * (precision2 * recall2) / (precision2 + recall2)
+  optimal_threshold2 <- pr_class2$curve[which.max(f1_class2), 3]
+
+  # In ngưỡng tối ưu
+  optimal_threshold0
+  optimal_threshold1
+  optimal_threshold2
+
+  # Đặt ngưỡng tối ưu
+  thresholds <- c(optimal_threshold0, optimal_threshold1, optimal_threshold2)
+
+  # Điều chỉnh xác suất dự đoán
+  adjusted_probs <- probs
+  adjusted_probs[, 1] <- ifelse(probs[, 1] > thresholds[1], probs[, 1], 0)
+  adjusted_probs[, 2] <- ifelse(probs[, 2] > thresholds[2], probs[, 2], 0)
+  adjusted_probs[, 3] <- ifelse(probs[, 3] > thresholds[3], probs[, 3], 0)
+
+  # Phân loại dựa trên xác suất cao nhất
+  predicted_class <- apply(adjusted_probs, 1, which.max) - 1
+
+  return(list(optimal_thresholds = thresholds, predicted_class = predicted_class))
+}
+
+```
+
+
+```{r}
+bayes_probs <- oversampling_results$bayes_pred_probs
+
+```
+
+
+```{r}
+result <- calculate_optimal_thresholds(bayes_probs, test_data)
+predicted_class <- result$predicted_class
+optimal_thresholds <- result$optimal_thresholds
+
+conf_matrix <- table(test_data$diabetes_012, predicted_class)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "Naive Bayes-Threshold")
+
+```
+
+
+## Work with Undersampling data
+
+
+
+```{r}
+undersampling_data <- read.csv("data/undersampled_data.csv")
+undersampling_data <- undersampling_data |> mutate(across(everything(), as.factor))
+
+glimpse(undersampling_data)
+
+table(undersampling_data$diabetes_012)
+
+```
+
+
+```{r}
+undersampling_results <- evaluate_models(undersampling_data, test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(test_data$diabetes_012, undersampling_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+plot_confusion_matrix(conf_matrix = confusion_matrix, model_name = "Naive Bayes")
+
+```
+
+
+```{r}
+bayes_probs <- undersampling_results$bayes_pred_probs
+result <- calculate_optimal_thresholds(bayes_probs, test_data)
+predicted_class <- result$predicted_class
+optimal_thresholds <- result$optimal_thresholds
+
+conf_matrix <- table(test_data$diabetes_012, predicted_class)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "Naive Bayes-Threshold")
+
+```
+
+
+## Work with SMOTE data
+
+
+
+```{r}
+smote_data <- read.csv("data/smote_augmented_data_80_percent.csv")
+smote_data <- smote_data |> mutate(across(everything(), as.factor))
+
+glimpse(smote_data)
+
+table(smote_data$diabetes_012)
+
+```
+
+
+```{r}
+smote_results <- evaluate_models(smote_data, test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(test_data$diabetes_012, smote_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+plot_confusion_matrix(conf_matrix = confusion_matrix, model_name = "Naive Bayes")
+
+```
+
+
+```{r}
+bayes_probs <- smote_results$bayes_pred_probs
+result <- calculate_optimal_thresholds(bayes_probs, test_data)
+predicted_class <- result$predicted_class
+optimal_thresholds <- result$optimal_thresholds
+
+conf_matrix <- table(test_data$diabetes_012, predicted_class)
+conf_matrix
+
+eval_multi_class(conf_matrix)
+# Plot confusion matrix using the function
+plot_confusion_matrix(conf_matrix, "Naive Bayes-Threshold")
+
+```
+
+
+# Modeling With Binary 0 & {1, 2}
+
+
+
+```{r}
+convert_to_binary <- function(data) {
+  data |> mutate(diabetes_012 = ifelse(diabetes_012 %in% c(1, 2), 1, ifelse(diabetes_012 == 0, 0, diabetes_012)))
+}
+
+
+binary_train_data <- convert_to_binary(train_data)
+binary_oversampling_data <- convert_to_binary(oversampling_data)
+binary_undersampling_data <- convert_to_binary(undersampling_data)
+binary_smote_data <- convert_to_binary(smote_data)
+binary_test_data <- convert_to_binary(test_data)
+
+```
+
+
+```{r}
+table(binary_train_data$diabetes_012)
+table(binary_test_data$diabetes_012)
+
+```
+
+
+## Original Dataset
+
+
+
+```{r}
+binary_results <- evaluate_models(binary_train_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+
+
+## Oversampling data
+
+
+
+```{r}
+oversampling_binary_results <- evaluate_models(binary_oversampling_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, oversampling_binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+
+
+## Work with undersampling data
+
+
+
+```{r}
+undersampling_binary_results <- evaluate_models(binary_undersampling_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, undersampling_binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+
+
+## Work with SMOTE data
+
+
+
+```{r}
+smote_binary_results <- evaluate_models(binary_smote_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, smote_binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+
+
+# Modeling With Binary 1 & {0, 2}
+
+
+
+```{r}
+convert_to_binary <- function(data) {
+  data |> mutate(diabetes_012 = ifelse(diabetes_012 %in% c(0, 2), 1, ifelse(diabetes_012 == 1, 0, diabetes_012)))
+}
+
+
+binary_train_data <- convert_to_binary(train_data)
+binary_oversampling_data <- convert_to_binary(oversampling_data)
+binary_undersampling_data <- convert_to_binary(undersampling_data)
+binary_smote_data <- convert_to_binary(smote_data)
+binary_test_data <- convert_to_binary(test_data)
+
+```
+
+
+```{r}
+table(binary_train_data$diabetes_012)
+table(binary_test_data$diabetes_012)
+
+```
+
+
+## Original Dataset
+
+
+
+```{r}
+binary_results <- evaluate_models(binary_train_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+
+
+## Oversampling data
+
+
+
+```{r}
+oversampling_binary_results <- evaluate_models(binary_oversampling_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, oversampling_binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+
+
+## Work with undersampling data
+
+
+
+```{r}
+undersampling_binary_results <- evaluate_models(binary_undersampling_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, undersampling_binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+
+
+## Work with SMOTE data
+
+
+
+```{r}
+smote_binary_results <- evaluate_models(binary_smote_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, smote_binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+
+
+# Modeling With Binary 2 & {0, 1}
+
+
+
+```{r}
+convert_to_binary <- function(data) {
+  data |> mutate(diabetes_012 = ifelse(diabetes_012 %in% c(1, 2), 1, ifelse(diabetes_012 == 0, 0, diabetes_012)))
+}
+
+
+binary_train_data <- convert_to_binary(train_data)
+binary_oversampling_data <- convert_to_binary(oversampling_data)
+binary_undersampling_data <- convert_to_binary(undersampling_data)
+binary_smote_data <- convert_to_binary(smote_data)
+binary_test_data <- convert_to_binary(test_data)
+
+```
+
+
+```{r}
+table(binary_train_data$diabetes_012)
+table(binary_test_data$diabetes_012)
+
+```
+
+
+## Original Dataset
+
+
+
+```{r}
+binary_results <- evaluate_models(binary_train_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+
+
+## Oversampling data
+
+
+
+```{r}
+oversampling_binary_results <- evaluate_models(binary_oversampling_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, oversampling_binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+
+
+## Work with undersampling data
+
+
+
+```{r}
+undersampling_binary_results <- evaluate_models(binary_undersampling_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, undersampling_binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+
+
+## Work with SMOTE data
+
+
+
+```{r}
+smote_binary_results <- evaluate_models(binary_smote_data, binary_test_data)
+
+```
+
+
+```{r}
+confusion_matrix <- table(binary_test_data$diabetes_012, smote_binary_results$bayes_predictions)
+confusion_matrix
+
+eval_multi_class(confusion_matrix)
+
+# Plot confusion matrix using the function
+plot_confusion_matrix(confusion_matrix, "Naive Bayes")
+
+```
+

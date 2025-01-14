@@ -1,0 +1,217 @@
+
+## Tiền xử lý cơ bản
+
+
+```{r}
+library(janitor)
+library(tidyverse)
+library(ggplot2)
+```
+
+
+```{r}
+data <- read.csv("../data/diabetes_012_health_indicators_BRFSS2015.csv", na=c("", "NA", "N/A")) |> clean_names()
+glimpse(data)
+```
+
+
+```{r}
+unique_counts <- data.frame(
+    variable = names(data),
+    unique_count = sapply(data, function(x) length(unique(x)))
+)
+qualitative_vars <- unique_counts |> filter(unique_count <= 13) |> pull(variable)
+data[qualitative_vars] <- lapply(data[qualitative_vars], as.factor)
+```
+
+
+```{r}
+glimpse(data)
+```
+
+
+## Chi Squared Test với biến định tính
+
+
+```{r}
+## Create a function to perform chi-square test and return results
+chi_square_results <- lapply(qualitative_vars[qualitative_vars != "diabetes_012"], function(var) {
+    contingency_table <- table(data[[var]], data$diabetes_012)
+    chi_test <- chisq.test(contingency_table)
+    
+    data.frame(
+        variable = var,
+        chi_square = chi_test$statistic,
+        df = chi_test$parameter,
+        p_value = chi_test$p.value
+    )
+})
+
+## Combine results into a single dataframe
+results_df <- do.call(rbind, chi_square_results)
+results_df <- results_df |>
+    arrange(desc(chi_square)) ##|>
+    ## mutate(p_value = format.pval(p_value))
+results_df
+
+## Plot the results
+results_df |>
+    ggplot(aes(x = reorder(variable, chi_square), y = chi_square)) +
+    geom_bar(stat = "identity", fill = "skyblue") +
+    geom_text(aes(label = round(chi_square, 2)), vjust = -0.5) +
+    coord_flip() +
+    labs(
+        title = "Chi-Square Test Results for Health Indicators and Diabetes",
+        x = "Health Indicator",
+        y = "Chi-Square Value"
+    ) +
+    theme_minimal()
+```
+
+
+```{r}
+## Create a function to perform chi-square test with Monte Carlo simulation
+set.seed(42)
+chi_square_results <- lapply(qualitative_vars[qualitative_vars != "diabetes_012"], function(var) {
+    contingency_table <- table(data[[var]], data$diabetes_012)
+    chi_test <- chisq.test(contingency_table, simulate.p.value = TRUE, B = 10000)
+    
+    data.frame(
+        variable = var,
+        chi_square = chi_test$statistic,
+        ## df = chi_test$parameter,
+        p_value = chi_test$p.value
+    )
+})
+
+## Combine results into a single dataframe
+results_df <- do.call(rbind, chi_square_results)
+results_df <- results_df |>
+    arrange(desc(chi_square)) |>
+    mutate(
+        signficance = case_when(
+            p_value < 0.001 ~ "***",
+            p_value < 0.01 ~ "**", 
+            p_value < 0.05 ~ "*",
+            TRUE ~ "ns"
+        )
+    )
+results_df
+
+## Plot the results
+results_df |>
+    ggplot(aes(x = reorder(variable, chi_square), y = chi_square)) +
+    geom_bar(stat = "identity", fill = "skyblue") +
+    geom_text(aes(label = round(chi_square, 2)), vjust = -0.5) +
+    coord_flip() +
+    labs(
+        title = "Chi-Square Test Results (Monte Carlo) for Health Indicators and Diabetes",
+        x = "Health Indicator",
+        y = "Chi-Square Value"
+    ) +
+    theme_minimal()
+```
+
+
+### AB Testing
+
+
+```{r}
+bmi <- data |> group_by(diabetes_012) |> summarise(mean_bmi = mean(bmi), sd_bmi = sd(bmi), count = n())
+bmi
+```
+
+
+Kết quả cho thấy số lượng người không bị tiểu đường chiếm đa số `213703`. Bên cạnh đó, chỉ số BMI trung bình của người bị tiểu đường cao hơn hẳn hai nhóm còn lại. Tuy nhiên, độ lệch chuẩn chỉ số BMI của nhóm bị tiểu đường cũng cao nhất, cho thấy độ biến động chỉ số BMI của nhóm này cao hơn nhóm không bị tiểu đường và tiền tiểu đường.
+
+
+```{r}
+## Plot BMI by diabetes status,violin plot
+ggplot(data, aes(x = diabetes_012, y = bmi,fill=diabetes_012)) +
+    geom_violin() + geom_boxplot(width = 0.1) +
+    scale_fill_manual(values = c("green", "yellow", "skyblue"),breaks = c("0","1","2")) +
+    labs(title = "BMI by Diabetes Status",
+         x = "Diabetes Status",
+         y = "BMI") +
+    theme_minimal()
+```
+
+
+Ta thực hiện kiểm định ANOVA để kiểm định về sự khác biệt về chỉ số BMI trung bình giữa ba nhóm bệnh nhân.
+
+
+```{r}
+library(lmPerm)
+set.seed(42)
+aov_result <- aov(bmi ~ diabetes_012, data = data)
+summary(aov_result)
+```
+
+
+Bảng kết quả này cho thấy biến `diabetes_012` (với 2 bậc tự do) giải thích một phần đáng kể biến thiên của `bmi` và có giá trị F rất lớn (6768) kèm p-value < 2e-16. Điều đó chứng tỏ sự khác nhau giữa các nhóm `diabetes_012` về giá trị `bmi` là có ý nghĩa thống kê rất cao (mức ý nghĩa ***).
+
+
+```{r}
+ment_hlth <- data |> group_by(diabetes_012) |> summarise(mean_ment_hlth = mean(ment_hlth), sd_ment_hlth = sd(ment_hlth), count = n())
+ment_hlth
+```
+
+
+Ta nhận thấy có sự khác biệt về trung bình của chỉ số `ment_hlth` ở ba nhóm bệnh nhân. Bên cạnh đó, độ biến động của chỉ số này ở ba nhóm cũng khác nhau.
+
+
+```{r}
+## Plot mental health by diabetes status, violin plot
+ggplot(data, aes(x = diabetes_012, y = ment_hlth,fill=diabetes_012)) +
+    geom_violin() + geom_boxplot(width = 0.15) +
+    scale_fill_manual(values = c("green", "yellow", "skyblue"),breaks = c("0","1","2")) +
+    labs(title = "Mental Health by Diabetes Status",
+         x = "Diabetes Status",
+         y = "Mental Health") +
+    theme_minimal()
+```
+
+
+Ta thực hiện kiểm định ANOVA để kiểm định sự khác biệt về chỉ số `ment_hlth` giữa ba nhóm bệnh nhân.
+
+
+```{r}
+set.seed(42)
+aov_result <- aov(ment_hlth ~ diabetes_012, data = data)
+summary(aov_result)
+```
+
+
+Biến `diabetes_012` có ảnh hưởng đáng kể đến `ment_hlth`, với giá trị F rất lớn (717.1) và p-value cực nhỏ (< 2e-16), cho thấy sự khác biệt giữa các nhóm `diabetes_012` về `ment_hlth` là có ý nghĩa thống kê rất cao.
+
+
+```{r}
+phys_hlth <- data |> group_by(diabetes_012) |> summarise(mean_phys_hlth = mean(phys_hlth), sd_phys_hlth = sd(phys_hlth), count = n())
+phys_hlth
+```
+
+
+Ta nhận thấy có sự khác biệt về trung bình chỉ sô `phys_hlth`, ở đó nhóm bệnh nhân bị tiểu đường có số ngày gặp vấn đề về thể chất đứng đầu. Độ biến động ở ba nhóm này cũng rất khác biệt.
+
+
+```{r}
+## Plot physical health by diabetes status, violin plot
+ggplot(data, aes(x = diabetes_012, y = phys_hlth,fill=diabetes_012)) +
+    geom_violin() + geom_boxplot(width = 0.15) +
+    scale_fill_manual(values = c("green", "yellow", "skyblue"),breaks = c("0","1","2")) +
+    labs(title = "Physical Health by Diabetes Status",
+         x = "Diabetes Status",
+         y = "Physical Health") +
+    theme_minimal()
+```
+
+
+```{r}
+set.seed(42)
+aov_result <- aov(phys_hlth ~ diabetes_012, data = data)
+summary(aov_result)
+```
+
+
+Biến `diabetes_012` có ảnh hưởng đáng kể đến `phys_hlth`, với giá trị F rất lớn (4079) và p-value cực nhỏ (< 2e-16), cho thấy sự khác biệt giữa các nhóm `diabetes_012` về `phys_hlth` là có ý nghĩa thống kê rất cao.
+

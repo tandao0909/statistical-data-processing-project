@@ -1,0 +1,116 @@
+
+# I. Xử lý, định dạng và chia tập dữ liệu
+
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(MASS)
+library(janitor)
+library(dplyr)
+library(pROC)
+```
+
+
+```{r}
+cleaned_data <- read.csv(file = "../data/cleaned_data.csv")
+glimpse(cleaned_data|>clean_names())
+```
+
+
+## Chuyển đổi cột BMI và phys_hlth về định tính
+
+
+```{r}
+process_data <- function(data) {
+  # Clean column names
+  data <- clean_names(data)
+  
+  # Hàm để phân loại BMI
+  categorize_bmi <- function(bmi) {
+    if (bmi < 18.5) {
+      return(0) # Underweight
+    } else if (bmi >= 18.5 & bmi < 24.9) {
+      return(1) # Normal weight
+    } else if (bmi >= 25 & bmi < 29.9) {
+      return(2) # Overweight
+    } else if (bmi >= 30 & bmi < 34.9) {
+      return(3) # Obesity class 1
+    } else if (bmi >= 35 & bmi < 39.9) {
+      return(4) # Obesity class 2
+    } else {
+      return(5) # Obesity class 3
+    }
+  }
+
+  categorize_phys <- function(phys) {
+    if (phys == 0) {
+      return(0) # 0 day
+    } else if (phys <= 7) {
+      return(1) # few days
+    } else if (phys <= 30) {
+      return(2) # many days
+    }
+  }
+  
+  # Tạo cột mới bmi_category và phys_category cho dataframe data
+  data$bmi_category <- sapply(data$bmi, categorize_bmi)
+  data$phys_category <- sapply(data$phys_hlth, categorize_phys)
+
+  # Xóa các cột không cần thiết
+  data <- within(data, rm("bmi", "ment_hlth", "phys_hlth"))
+
+  data <- data |> mutate(across(everything(), as.factor))
+  return(data)
+}
+```
+
+
+```{r}
+cleaned_data <- process_data(cleaned_data)
+glimpse(cleaned_data)
+```
+
+
+## Chia dữ liệu huấn luyện và thực tế
+
+
+```{r}
+# Hàm để chia train test theo tỷ lệ
+train_test_split <- function(data, train_ratio = 0.8) {
+        set.seed(123)  # Đặt seed để đảm bảo tính tái lập
+
+        # Randomly shuffle the data
+        shuffled_indices <- sample(seq_len(nrow(data)))
+
+        # Determine the number of training samples
+        train_size <- floor(train_ratio * nrow(data))
+
+        # Split the data into training and testing sets
+        train_indices <- shuffled_indices[1:train_size]
+        test_indices <- shuffled_indices[(train_size + 1):nrow(data)]
+
+        train_data <- data[train_indices, ]
+        test_data <- data[test_indices, ]
+
+        res <- list(
+                train_data = train_data,
+                test_data = test_data
+        )
+        return(res)
+}
+```
+
+
+```{r}
+split_cleaned_data <- train_test_split(cleaned_data)
+
+print(table(split_cleaned_data$train_data$diabetes_012))
+print(table(split_cleaned_data$test_data$diabetes_012))
+```
+
+
+```{r}
+write.csv(split_cleaned_data$train_data, file = "../data/train_data.csv", row.names = FALSE)
+write.csv(split_cleaned_data$test_data, file = "../data/test_data.csv", row.names = FALSE)
+```

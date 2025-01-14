@@ -1,0 +1,272 @@
+
+# I. Xử lý, định dạng và chia tập dữ liệu
+
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(MASS)
+library(janitor)
+library(dplyr)
+library(pROC)
+```
+
+
+```{r}
+cleaned_data <- read.csv(file = "data/cleaned_data.csv")
+glimpse(cleaned_data|>clean_names())
+```
+
+
+## Chuyển đổi cột BMI và phys_hlth về định tính
+
+
+```{r}
+process_data <- function(data) {
+  # Clean column names
+  data <- clean_names(data)
+  
+  # Hàm để phân loại BMI
+  categorize_bmi <- function(bmi) {
+    if (bmi < 18.5) {
+      return(0) # Underweight
+    } else if (bmi >= 18.5 & bmi < 24.9) {
+      return(1) # Normal weight
+    } else if (bmi >= 25 & bmi < 29.9) {
+      return(2) # Overweight
+    } else if (bmi >= 30 & bmi < 34.9) {
+      return(3) # Obesity class 1
+    } else if (bmi >= 35 & bmi < 39.9) {
+      return(4) # Obesity class 2
+    } else {
+      return(5) # Obesity class 3
+    }
+  }
+
+  categorize_phys <- function(phys) {
+    if (phys == 0) {
+      return(0) # 0 day
+    } else if (phys <= 7) {
+      return(1) # few days
+    } else if (phys <= 30) {
+      return(2) # many days
+    }
+  }
+  
+  # Tạo cột mới bmi_category và phys_category cho dataframe data
+  data$bmi_category <- sapply(data$bmi, categorize_bmi)
+  data$phys_category <- sapply(data$phys_hlth, categorize_phys)
+
+  # Xóa các cột không cần thiết
+  data <- within(data, rm("bmi", "ment_hlth", "phys_hlth"))
+
+  data <- data |> mutate(across(everything(), as.factor))
+  return(data)
+}
+```
+
+
+```{r}
+cleaned_data <- process_data(cleaned_data)
+glimpse(cleaned_data)
+```
+
+
+## Chia dữ liệu huấn luyện và thực tế
+
+
+```{r}
+# Hàm để chia train test theo tỷ lệ
+train_test_split <- function(data, train_ratio = 0.8) {
+        set.seed(123)  # Đặt seed để đảm bảo tính tái lập
+
+        # Randomly shuffle the data
+        shuffled_indices <- sample(seq_len(nrow(data)))
+
+        # Determine the number of training samples
+        train_size <- floor(train_ratio * nrow(data))
+
+        # Split the data into training and testing sets
+        train_indices <- shuffled_indices[1:train_size]
+        test_indices <- shuffled_indices[(train_size + 1):nrow(data)]
+
+        train_data <- data[train_indices, ]
+        test_data <- data[test_indices, ]
+
+        res <- list(
+                train_data = train_data,
+                test_data = test_data
+        )
+        return(res)
+}
+```
+
+
+```{r}
+split_cleaned_data <- train_test_split(cleaned_data)
+
+print(table(split_cleaned_data$train_data$diabetes_012))
+print(table(split_cleaned_data$test_data$diabetes_012))
+```
+
+
+```{r}
+write.csv(split_cleaned_data$train_data, file = "data/train_data.csv", row.names = FALSE)
+write.csv(split_cleaned_data$test_data, file = "data/test_data.csv", row.names = FALSE)
+```
+
+# II. Tăng cường dữ liệu
+
+```{r}
+if (!require("reticulate")) install.packages("reticulate")
+if (!require("tidyverse")) install.packages("tidyverse")
+if (!require("smotefamily")) install.packages("smotefamily")
+
+library(reticulate)
+library(tidyverse)
+library(smotefamily)
+
+```
+
+```{r}
+file_path <- file.path("data/train_data.csv")
+data <- read.csv(file_path)
+data
+```
+
+Data bị imbalance
+Thực hiện undersampling và oversampling
+
+```{r}
+# kiểm tra data imbalance
+target_distribution <- table(data$diabetes_012)
+print(target_distribution)
+```
+
+```{r}
+imbalance_ratio <- target_distribution["0"] / target_distribution["1"]
+cat("Imbalance Ratio:", imbalance_ratio, "\n")
+```
+
+```{r}
+resample_data <- function(df, n, replace = FALSE) {
+  df[sample(nrow(df), n, replace = replace), ]
+}
+
+
+# cột chứa nhãn (target) và các đặc trưng (features)
+target_column <- "diabetes_012"
+X <- data[, !names(data) %in% c(target_column)]
+y <- data[[target_column]]
+
+# 1. Undersampling
+min_class_count <- min(table(y))
+undersampled_data <- data.frame()
+
+for (label in unique(y)) {
+  subset <- data[data[[target_column]] == label, ]
+  undersampled_subset <- resample_data(subset, min_class_count)
+  undersampled_data <- rbind(undersampled_data, undersampled_subset)
+}
+
+write.csv(undersampled_data, "undersampled_data.csv", row.names = FALSE)
+cat("\nĐã lưu dữ liệu undersampled vào 'undersampled_data.csv'\n")
+
+
+# 2. Oversampling (tăng 2 nhãn ít lên bằng 80% lượng nhãn nhiều nhất)
+max_class_count <- max(table(y))
+oversample_limit <- as.integer(max_class_count * 0.8)
+oversampled_data <- data.frame()
+
+for (label in unique(y)) {
+  subset <- data[data[[target_column]] == label, ]
+  if (nrow(subset) < oversample_limit) {
+    oversampled_subset <- resample_data(subset, oversample_limit, replace = TRUE)
+  } else {
+    oversampled_subset <- subset
+  }
+  oversampled_data <- rbind(oversampled_data, oversampled_subset)
+}
+
+write.csv(oversampled_data, "oversampled_data.csv", row.names = FALSE)
+cat("\nĐã lưu dữ liệu oversampled vào 'oversampled_data.csv'\n")
+```
+
+
+```{r}
+library(caret)
+library(dplyr)
+
+# Tính số lượng mẫu cần tăng cường
+majority_count <- sum(data$diabetes_012 == 0)
+augmentation_target <- round(majority_count * 0.8)
+
+# Tách dữ liệu gốc theo từng nhãn
+data_0 <- data[data$diabetes_012 == 0, ]
+data_1 <- data[data$diabetes_012 == 1, ]
+data_2 <- data[data$diabetes_012 == 2, ]
+
+# One-hot encoding cho dữ liệu nhãn 1 và 2
+categorical_columns <- setdiff(names(data), "diabetes_012")
+one_hot_encoded <- dummyVars(~ ., data = data[, categorical_columns])
+X_encoded <- predict(one_hot_encoded, newdata = data[, categorical_columns])
+X_encoded <- as.data.frame(X_encoded)
+
+X_1 <- X_encoded[data$diabetes_012 == 1, ]
+X_2 <- X_encoded[data$diabetes_012 == 2, ]
+X_0 <- X_encoded[data$diabetes_012 == 0, ]
+
+# Gán nhãn mục tiêu
+y_1 <- as.factor(data_1$diabetes_012)
+y_2 <- as.factor(data_2$diabetes_012)
+
+# Tính số mẫu cần bổ sung cho mỗi nhãn
+required_1 <- augmentation_target - nrow(data_1)
+required_2 <- augmentation_target - nrow(data_2)
+
+# Áp dụng SMOTE cho nhãn 1
+smote_1 <- SMOTE(X_1, y_1, K = 5, dup_size = ceiling(required_1 / nrow(X_1)))
+
+# Áp dụng SMOTE cho nhãn 2
+smote_2 <- SMOTE(X_2, y_2, K = 5, dup_size = ceiling(required_2 / nrow(X_2)))
+
+# Lấy dữ liệu đã tăng cường
+X_1_smote <- round(smote_1$data[, -ncol(smote_1$data)])
+y_1_smote <- smote_1$data[[ncol(smote_1$data)]]
+
+X_2_smote <- round(smote_2$data[, -ncol(smote_2$data)])
+y_2_smote <- smote_2$data[[ncol(smote_2$data)]]
+
+# Kết hợp lại dữ liệu
+X_combined <- rbind(X_0, X_1_smote, X_2_smote)
+y_combined <- c(rep(0, nrow(X_0)), as.numeric(y_1_smote), as.numeric(y_2_smote))
+
+final_data <- cbind(X_combined, diabetes_012 = y_combined)
+
+
+write.csv(final_data, "balanced_data_80_percent.csv", row.names = FALSE)
+cat("\nDữ liệu đã lưu vào file 'balanced_data_80_percent.csv'")
+
+
+cat("\nPhân phối nhãn sau SMOTE:\n")
+print(table(y_combined))
+
+
+```
+
+
+```{r}
+# Phân phối sau khi tăng cường
+library(ggplot2)
+
+ggplot(final_data, aes(x = factor(diabetes_012))) +
+  geom_bar(fill = "steelblue") +
+  labs(title = paste("Bar Chart of", target_column),
+       x = target_column,
+       y = "Count") +
+  theme_minimal() +
+  theme(text = element_text(size = 12))
+```
+
+
+

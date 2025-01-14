@@ -1,0 +1,770 @@
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(janitor)
+library(dplyr)
+library(pROC)
+library(caret)
+library(nnet)
+```
+
+
+```{r}
+undersampling_data <- read.csv(file = "data/undersampled_data.csv")
+oversampling_data <- read.csv(file = "data/oversampled_data.csv")
+smote_data <- read.csv(file = "data/smote_augmented_data_80_percent.csv")
+cleaned_data <- read.csv(file = "data/train_data.csv")
+```
+
+
+```{r}
+process_data <- function(data) {
+  # Clean column names
+  data <- clean_names(data)
+  
+  # # Hàm để phân loại BMI
+  # categorize_bmi <- function(bmi) {
+  #   if (bmi < 18.5) {
+  #     return('Underweight')
+  #   } else if (bmi >= 18.5 & bmi < 24.9) {
+  #     return('Normal weight')
+  #   } else if (bmi >= 25 & bmi < 29.9) {
+  #     return('Overweight')
+  #   } else if (bmi >= 30 & bmi < 34.9) {
+  #     return('Obesity class 1')
+  #   } else if (bmi >= 35 & bmi < 39.9) {
+  #     return('Obesity class 2')
+  #   } else {
+  #     return('Obesity class 3')
+  #   }
+  # }
+  
+  # # Tạo cột mới bmi_category cho dataframe data
+  # data$bmi_category <- sapply(data$bmi, categorize_bmi)
+  # # Chuyển đổi bmi_category thành factor với các levels cụ thể
+  # data$bmi_category <- factor(data$bmi_category, levels = c('Underweight', 'Normal weight', 'Overweight', 'Obesity class 1', 'Obesity class 2', 'Obesity class 3'))
+  
+
+  # # Xóa các cột không cần thiết
+  # data <- within(data, rm("bmi", "ment_hlth"))
+  
+  # # Chuyển đổi các biến không định lượng thành factor
+  # quantitative_vars <- c("phys_hlth")
+
+  # non_quantitative_vars <- setdiff(names(data), quantitative_vars)
+  # data[non_quantitative_vars] <- lapply(data[non_quantitative_vars], factor)
+
+  # Chuyển đổi biến diabetes_012 thành 3 biến nhị phân
+  data$is_diabetes <- as.numeric(data$diabetes_012 == 2)
+  data$is_prediabetes <- as.numeric(data$diabetes_012 == 1)
+  data$is_no_diabetes <- as.numeric(data$diabetes_012 == 0)
+
+  # Sắp xếp lại cột
+  other_cols <- setdiff(names(data), c("diabetes_012", "is_diabetes", "is_prediabetes", "is_no_diabetes"))
+  data <- data[, c(other_cols, "diabetes_012", "is_diabetes", "is_prediabetes", "is_no_diabetes")]
+  
+  return(data)
+}
+
+
+set.seed(42) 
+
+train_test_split <- function(data, train_ratio = 0.8) {
+    train_indices <- sample(seq_len(nrow(data)), size = floor(train_ratio * nrow(data)), replace = FALSE)
+    train_data <- data[train_indices, ]
+    test_data <- data[-train_indices, ]
+    res <- list(
+        train_data = train_data,
+        test_data = test_data
+    )
+    return(res)
+}
+
+```
+
+
+```{r}
+undersampling_data <- process_data(undersampling_data)
+oversampling_data <- process_data(oversampling_data)
+smote_data <- process_data(smote_data)
+cleaned_data <- process_data(cleaned_data)
+
+```
+
+
+```{r}
+ggplot(cleaned_data, aes(x = factor(is_diabetes))) +
+    geom_bar(fill = "steelblue") +
+    geom_text(stat = 'count', aes(label = ..count..), vjust = -0.5) +
+    labs(x = "Diabetes Status", y = "Count",
+             title = "Distribution of Diabetes Cases") +
+    scale_x_discrete(labels = c("No Diabetes", "Diabetes")) +
+    theme_minimal()
+```
+
+
+```{r}
+library(ROSE)
+set.seed(42)
+
+# Use is_diabetes as the binary target variable
+# Perform ROSE sampling
+smote_balanced <- ROSE(is_prediabetes ~ ., data = cleaned_data, seed = 42, N = nrow(cleaned_data), p = 0.5)$data
+
+# Print class distribution after ROSE
+table(smote_balanced$is_prediabetes)
+```
+
+
+```{r}
+# Undersampling
+under_balanced <- ROSE(is_prediabetes ~ ., data = cleaned_data, seed = 42, 
+                      N = 2 * sum(cleaned_data$is_prediabetes == 1), 
+                      p = 0.5)$data
+
+# Print class distribution after balancing
+cat("Undersampling distribution:\n")
+table(under_balanced$is_prediabetes)
+
+# Oversampling
+over_balanced <- ROSE(is_prediabetes ~ ., data = cleaned_data, seed = 42,
+                     N = 2 * sum(cleaned_data$is_prediabetes == 0),
+                     p = 0.5)$data
+
+
+cat("\nOversampling distribution:\n")
+table(over_balanced$is_prediabetes)
+```
+
+
+# Modeling
+
+
+## Binary
+### Đánh giá chung
+
+
+```{r}
+# List of datasets to evaluate
+datasets <- list(
+    "Original Data" = cleaned_data,
+    "Oversampled Data" = over_balanced,
+    "Undersampled Data" = under_balanced,
+    "SMOTE Data" = smote_balanced
+)
+
+# Store results
+results <- data.frame(
+    Dataset = character(),
+    Accuracy = numeric(),
+    Sensitivity = numeric(),
+    Specificity = numeric(),
+    stringsAsFactors = FALSE
+)
+
+# Loop through each dataset
+for (dataset_name in names(datasets)) {
+    data <- datasets[[dataset_name]]
+    label = "is_prediabetes"
+    
+    # Split data
+    train_data <- train_test_split(data)$train_data
+    test_data <- train_test_split(data)$test_data
+    
+    # Define predictors
+    predictors <- names(data)[!names(data) %in% 
+                                   c("is_diabetes", "is_prediabetes", "is_no_diabetes", "diabetes_012")]
+    
+    # Create formula
+    formula <- as.formula(paste(label,"~", paste(predictors, collapse = " + ")))
+    
+    # Fit model
+    logistic_model <- glm(formula, data = train_data, family = "binomial")
+    
+    # Make predictions
+    predictions_prob <- predict(logistic_model, newdata = test_data, type = "response")
+    predictions <- ifelse(predictions_prob > 0.5, 1, 0)
+    
+    # Calculate metrics
+    accuracy <- mean(predictions == test_data$is_prediabetes)
+    sensitivity <- sum(predictions == 1 & test_data$is_prediabetes == 1) / sum(test_data$is_prediabetes == 1)
+    specificity <- sum(predictions == 0 & test_data$is_prediabetes == 0) / sum(test_data$is_prediabetes == 0)
+    
+    # Store results
+    results <- rbind(results, data.frame(
+        Dataset = dataset_name,
+        Accuracy = round(accuracy, 4),
+        Sensitivity = round(sensitivity, 4),
+        Specificity = round(specificity, 4)
+    ))
+}
+# Display results
+print(results)
+```
+
+
+### Lựa chọn bộ data SMOTE
+
+
+```{r}
+data = smote_balanced
+label = "is_prediabetes"
+
+train_data <- train_test_split(data)$train_data
+test_data <- train_test_split(data)$test_data
+
+predictors <- names(data)[!names(data) %in% 
+                               c("is_diabetes", "is_prediabetes", "is_no_diabetes", "diabetes_012")]
+
+formula <- as.formula(paste(label,"~", paste(predictors, collapse = " + ")))
+
+logistic_model <- glm(formula, data = train_data, family = "binomial")
+# summary(logistic_model)
+
+predictions_prob <- predict(logistic_model, newdata = test_data, type = "response")
+predictions <- ifelse(predictions_prob >  0.5, 1, 0)
+
+accuracy <- mean(predictions == test_data$is_prediabetes)
+print(paste("Model Accuracy:", round(accuracy, 4)))
+
+# Calculate sensitivity and specificity
+sensitivity <- sum(predictions == 1 & test_data$is_prediabetes == 1) / sum(test_data$is_prediabetes == 1)
+specificity <- sum(predictions == 0 & test_data$is_prediabetes == 0) / sum(test_data$is_prediabetes == 0)
+
+print(paste("Sensitivity:", round(sensitivity, 4)))
+print(paste("Specificity:", round(specificity, 4)))
+
+# Calculate Kappa
+conf_matrix <- table(Predicted = predictions, Actual = test_data$is_prediabetes)
+cc <- sum(diag(conf_matrix))
+sc <- sum(conf_matrix)
+pp <- colSums(conf_matrix)
+tt <- rowSums(conf_matrix)
+kappa <- (cc * sc - sum(pp * tt)) / (sc^2 - sum(pp * tt))
+print(paste("Kappa:", round(kappa, 4)))
+
+# Calculate Macro F1
+precision <- diag(conf_matrix) / colSums(conf_matrix)
+recall <- diag(conf_matrix) / rowSums(conf_matrix)
+macro_precision <- mean(precision)
+macro_recall <- mean(recall)
+macro_f1 <- 2 * macro_precision * macro_recall / (macro_precision + macro_recall)
+print(paste("Macro F1:", round(macro_f1, 4)))
+```
+
+
+```{r}
+conf_matrix <- confusionMatrix(factor(predictions), factor(test_data$is_prediabetes))
+
+conf_data <- as.data.frame(conf_matrix$table)
+conf_data
+ggplot(conf_data, aes(x = Reference, y = Prediction)) +
+    geom_tile(aes(fill = Freq)) +
+    geom_text(aes(label = Freq)) +
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    theme_minimal() +
+    labs(title = "Confusion Matrix for PreDiabetes Prediction",
+             x = "Actual",
+             y = "Predicted")
+```
+
+
+```{r}
+# Calculate ROC curve
+roc_obj <- roc(test_data$is_prediabetes, predictions_prob)
+auc_value <- auc(roc_obj)
+print(ci.auc(roc_obj,conf.level = 0.95))
+
+# Plot ROC curve
+plot(roc_obj, main = "ROC Curve",
+    col = "blue", lwd = 2,
+    xlab = "False Positive Rate (1-Specificity)",
+    ylab = "True Positive Rate (Sensitivity)")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+
+# Add AUC value to plot
+text(0.6, 0.2, paste("AUC =", round(auc_value, 3)),
+    col = "black", cex = 1.2)
+```
+
+
+### Tìm ngưỡng tối ưu
+
+
+```{r}
+# Lựa chọn ngưỡng tối ưu dựa trên phương pháp Youden Index
+out_youd <- coords(roc_obj, "best", ret = c("threshold", "specificity", "sensitivity"),best.method = "youden")
+print(out_youd)
+```
+
+
+```{r}
+out_youd <- coords(roc_obj, "best", ret = c("threshold", "specificity", "sensitivity"),best.method = "closest.topleft")
+print(out_youd)
+```
+
+
+### Train lại với ngưỡng tối ưu
+
+
+```{r}
+data = smote_balanced
+label = "is_prediabetes"
+
+train_data <- train_test_split(data)$train_data
+test_data <- train_test_split(data)$test_data
+
+predictors <- names(data)[!names(data) %in% 
+                               c("is_diabetes", "is_prediabetes", "is_no_diabetes", "diabetes_012")]
+
+formula <- as.formula(paste(label,"~", paste(predictors, collapse = " + ")))
+
+logistic_model <- glm(formula, data = train_data, family = "binomial")
+# summary(logistic_model)
+
+predictions_prob <- predict(logistic_model, newdata = test_data, type = "response")
+predictions <- ifelse(predictions_prob >  0.452336, 1, 0)
+
+accuracy <- mean(predictions == test_data$is_prediabetes)
+print(paste("Model Accuracy:", round(accuracy, 4)))
+# Calculate sensitivity and specificity
+sensitivity <- sum(predictions == 1 & test_data$is_prediabetes == 1) / sum(test_data$is_prediabetes == 1)
+specificity <- sum(predictions == 0 & test_data$is_prediabetes == 0) / sum(test_data$is_prediabetes == 0)
+
+print(paste("Sensitivity:", round(sensitivity, 4)))
+print(paste("Specificity:", round(specificity, 4)))
+```
+
+
+```{r}
+conf_matrix <- confusionMatrix(factor(predictions), factor(test_data$is_prediabetes))
+
+conf_data <- as.data.frame(conf_matrix$table)
+conf_data
+ggplot(conf_data, aes(x = Reference, y = Prediction)) +
+    geom_tile(aes(fill = Freq)) +
+    geom_text(aes(label = Freq)) +
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    theme_minimal() +
+    labs(title = "Confusion Matrix for PreDiabetes Prediction",
+             x = "Actual",
+             y = "Predicted")
+```
+
+
+```{r}
+# Calculate ROC curve
+roc_obj <- roc(test_data$is_prediabetes, predictions_prob)
+auc_value <- auc(roc_obj)
+print(ci.auc(roc_obj,conf.level = 0.95))
+
+# Plot ROC curve
+plot(roc_obj, main = "ROC Curve",
+    col = "blue", lwd = 2,
+    xlab = "False Positive Rate (1-Specificity)",
+    ylab = "True Positive Rate (Sensitivity)")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+
+# Add AUC value to plot
+text(0.6, 0.2, paste("AUC =", round(auc_value, 3)),
+    col = "black", cex = 1.2)
+```
+
+
+### Lựa chọn Undersampling Data
+
+
+```{r}
+data = under_balanced
+label = "is_prediabetes"
+
+train_data <- train_test_split(data)$train_data
+test_data <- train_test_split(data)$test_data
+
+predictors <- names(data)[!names(data) %in% 
+                               c("is_diabetes", "is_prediabetes", "is_no_diabetes", "diabetes_012")]
+
+formula <- as.formula(paste(label,"~", paste(predictors, collapse = " + ")))
+
+logistic_model <- glm(formula, data = train_data, family = "binomial")
+# summary(logistic_model)
+
+predictions_prob <- predict(logistic_model, newdata = test_data, type = "response")
+predictions <- ifelse(predictions_prob >  0.4807887, 1, 0)
+
+accuracy <- mean(predictions == test_data$is_prediabetes)
+print(paste("Model Accuracy:", round(accuracy, 4)))
+
+# Calculate sensitivity and specificity
+sensitivity <- sum(predictions == 1 & test_data$is_prediabetes == 1) / sum(test_data$is_prediabetes == 1)
+specificity <- sum(predictions == 0 & test_data$is_prediabetes == 0) / sum(test_data$is_prediabetes == 0)
+
+print(paste("Sensitivity:", round(sensitivity, 4)))
+print(paste("Specificity:", round(specificity, 4)))
+
+# Calculate Kappa
+conf_matrix <- table(Predicted = predictions, Actual = test_data$is_prediabetes)
+cc <- sum(diag(conf_matrix))
+sc <- sum(conf_matrix)
+pp <- colSums(conf_matrix)
+tt <- rowSums(conf_matrix)
+kappa <- (cc * sc - sum(pp * tt)) / (sc^2 - sum(pp * tt))
+print(paste("Kappa:", round(kappa, 4)))
+
+# Calculate Macro F1
+precision <- diag(conf_matrix) / colSums(conf_matrix)
+recall <- diag(conf_matrix) / rowSums(conf_matrix)
+macro_precision <- mean(precision)
+macro_recall <- mean(recall)
+macro_f1 <- 2 * macro_precision * macro_recall / (macro_precision + macro_recall)
+print(paste("Macro F1:", round(macro_f1, 4)))
+```
+
+
+```{r}
+conf_matrix <- confusionMatrix(factor(predictions), factor(test_data$is_prediabetes))
+
+conf_data <- as.data.frame(conf_matrix$table)
+conf_data
+ggplot(conf_data, aes(x = Reference, y = Prediction)) +
+    geom_tile(aes(fill = Freq)) +
+    geom_text(aes(label = Freq)) +
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    theme_minimal() +
+    labs(title = "Confusion Matrix for PreDiabetes Prediction",
+             x = "Actual",
+             y = "Predicted")
+```
+
+
+### Lụa chọn Oversampling Data
+
+
+```{r}
+data = over_balanced
+label = "is_prediabetes"
+
+train_data <- train_test_split(data)$train_data
+test_data <- train_test_split(data)$test_data
+
+predictors <- names(data)[!names(data) %in% 
+                               c("is_diabetes", "is_prediabetes", "is_no_diabetes", "diabetes_012")]
+
+formula <- as.formula(paste(label,"~", paste(predictors, collapse = " + ")))
+
+logistic_model <- glm(formula, data = train_data, family = "binomial")
+# summary(logistic_model)
+
+predictions_prob <- predict(logistic_model, newdata = test_data, type = "response")
+predictions <- ifelse(predictions_prob >   0.4644232, 1, 0)
+
+accuracy <- mean(predictions == test_data$is_prediabetes)
+print(paste("Model Accuracy:", round(accuracy, 4)))
+
+# Calculate sensitivity and specificity
+sensitivity <- sum(predictions == 1 & test_data$is_prediabetes == 1) / sum(test_data$is_prediabetes == 1)
+specificity <- sum(predictions == 0 & test_data$is_prediabetes == 0) / sum(test_data$is_prediabetes == 0)
+
+print(paste("Sensitivity:", round(sensitivity, 4)))
+print(paste("Specificity:", round(specificity, 4)))
+
+# Calculate Kappa
+conf_matrix <- table(Predicted = predictions, Actual = test_data$is_prediabetes)
+cc <- sum(diag(conf_matrix))
+sc <- sum(conf_matrix)
+pp <- colSums(conf_matrix)
+tt <- rowSums(conf_matrix)
+kappa <- (cc * sc - sum(pp * tt)) / (sc^2 - sum(pp * tt))
+print(paste("Kappa:", round(kappa, 4)))
+
+# Calculate Macro F1
+precision <- diag(conf_matrix) / colSums(conf_matrix)
+recall <- diag(conf_matrix) / rowSums(conf_matrix)
+macro_precision <- mean(precision)
+macro_recall <- mean(recall)
+macro_f1 <- 2 * macro_precision * macro_recall / (macro_precision + macro_recall)
+print(paste("Macro F1:", round(macro_f1, 4)))
+```
+
+
+```{r}
+conf_matrix <- confusionMatrix(factor(predictions), factor(test_data$is_prediabetes))
+
+conf_data <- as.data.frame(conf_matrix$table)
+conf_data
+ggplot(conf_data, aes(x = Reference, y = Prediction)) +
+    geom_tile(aes(fill = Freq)) +
+    geom_text(aes(label = Freq)) +
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    theme_minimal() +
+    labs(title = "Confusion Matrix for PreDiabetes Prediction",
+             x = "Actual",
+             y = "Predicted")
+```
+
+
+## Multiclass
+
+
+```{r}
+data = undersampling_data
+label = "diabetes_012"
+
+train_data <- train_test_split(data)$train_data
+test_data <- train_test_split(data)$test_data
+
+predictors <- names(data)[!names(data) %in% 
+                               c("is_diabetes", "is_prediabetes", "is_no_diabetes", "diabetes_012")]
+
+formula <- as.formula(paste(label,"~", paste(predictors, collapse = " + ")))
+
+logistic_model <- multinom(formula, data = train_data, maxit=1500)
+```
+
+
+```{r}
+# Get predictions
+predictions <- predict(logistic_model, newdata = test_data)
+
+# Create confusion matrix
+conf_matrix <- table(Actual = test_data$diabetes_012,Predicted = predictions)
+
+# Define evaluation function for multiclass metrics
+eval_metrics <- function(x) {
+    cc <- sum(diag(x))
+    sc <- sum(x)
+    pp <- colSums(x)
+    tt <- rowSums(x)
+    
+    # Calculate metrics
+    prec <- diag(x)/colSums(x)
+    recall <- diag(x)/rowSums(x)
+    macro_prec <- mean(prec)
+    macro_recall <- mean(recall)
+    macro_f1 <- 2 * macro_prec * macro_recall/(macro_prec + macro_recall)
+    acc <- cc/sc
+    kap <- (cc * sc - sum(pp * tt))/(sc^2 - sum(pp * tt))
+    
+    return(list(
+        Precision = prec,   
+        Recall = recall,
+        Accuracy = acc,
+        Kappa = kap,
+        Macro_F1 = macro_f1
+    ))
+}
+
+# Calculate and display metrics
+metrics <- eval_metrics(conf_matrix)
+print(metrics)
+
+# Visualize confusion matrix
+conf_data <- as.data.frame(conf_matrix)
+ggplot(conf_data, aes(x = Actual, y = Predicted)) +
+    geom_tile(aes(fill = Freq)) +
+    geom_text(aes(label = Freq)) +
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    theme_minimal() +
+    labs(title = "Confusion Matrix for Multiclass Diabetes Prediction",
+         x = "Actual",
+         y = "Predicted")
+```
+
+
+```{r}
+data = oversampling_data
+label = "diabetes_012"
+
+train_data <- train_test_split(data)$train_data
+test_data <- train_test_split(data)$test_data
+
+predictors <- names(data)[!names(data) %in% 
+                               c("is_diabetes", "is_prediabetes", "is_no_diabetes", "diabetes_012")]
+
+formula <- as.formula(paste(label,"~", paste(predictors, collapse = " + ")))
+
+logistic_model <- multinom(formula, data = train_data, maxit=1500)
+summary(logistic_model)
+# Get predictions
+predictions <- predict(logistic_model, newdata = test_data)
+
+# Create confusion matrix
+conf_matrix <- table(Predicted = predictions, Actual = test_data$diabetes_012)
+
+```
+
+
+```{r}
+# Get predictions
+predictions <- predict(logistic_model, newdata = test_data)
+
+# Create confusion matrix
+conf_matrix <- table(Actual = test_data$diabetes_012,Predicted=predictions)
+
+# Define evaluation function for multiclass metrics
+eval_metrics <- function(x) {
+    cc <- sum(diag(x))
+    sc <- sum(x)
+    pp <- colSums(x)
+    tt <- rowSums(x)
+    
+    # Calculate metrics
+    prec <- diag(x)/colSums(x)
+    recall <- diag(x)/rowSums(x)
+    macro_prec <- mean(prec)
+    macro_recall <- mean(recall)
+    macro_f1 <- 2 * macro_prec * macro_recall/(macro_prec + macro_recall)
+    acc <- cc/sc
+    kap <- (cc * sc - sum(pp * tt))/(sc^2 - sum(pp * tt))
+    
+    return(list(
+        Precision = prec,   
+        Recall = recall,
+        Accuracy = acc,
+        Kappa = kap,
+        Macro_F1 = macro_f1
+    ))
+}
+
+# Calculate and display metrics
+metrics <- eval_metrics(conf_matrix)
+print(metrics)
+
+# Visualize confusion matrix
+conf_data <- as.data.frame(conf_matrix)
+ggplot(conf_data, aes(x = Actual, y = Predicted)) +
+    geom_tile(aes(fill = Freq)) +
+    geom_text(aes(label = Freq)) +
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    theme_minimal() +
+    labs(title = "Confusion Matrix for Multiclass Diabetes Prediction",
+         x = "Actual",
+         y = "Predicted")
+
+```
+
+
+```{r}
+data = smote_data
+label = "diabetes_012"
+
+train_data <- train_test_split(data)$train_data
+test_data <- train_test_split(data)$test_data
+
+predictors <- names(data)[!names(data) %in% 
+                               c("is_diabetes", "is_prediabetes", "is_no_diabetes", "diabetes_012")]
+
+formula <- as.formula(paste(label,"~", paste(predictors, collapse = " + ")))
+
+logistic_model <- multinom(formula, data = train_data, maxit=1500)
+# Get predictions
+predictions <- predict(logistic_model, newdata = test_data)
+
+# Create confusion matrix
+conf_matrix <- table(Predicted = predictions, Actual = test_data$diabetes_012)
+
+# Define evaluation function
+eval_metrics <- function(x) {
+    cc <- sum(diag(x))
+    sc <- sum(x)
+    pp <- colSums(x)
+    tt <- rowSums(x)
+    
+    # Calculate metrics
+    prec <- diag(x)/colSums(x)
+    recall <- diag(x)/rowSums(x)
+    macro_prec <- mean(prec)
+    macro_recall <- mean(recall)
+    macro_f1 <- 2 * macro_prec * macro_recall/(macro_prec + macro_recall)
+    acc <- cc/sc
+    kap <- (cc * sc - sum(pp * tt))/(sc^2 - sum(pp * tt))
+    
+    return(list(
+        Precision = prec,   
+        Recall = recall,
+        Accuracy = acc,
+        Kappa = kap,
+        Macro_F1 = macro_f1
+    ))
+}
+
+# Calculate and display metrics
+metrics <- eval_metrics(conf_matrix)
+print(metrics)
+
+# Visualize confusion matrix
+conf_data <- as.data.frame(conf_matrix)
+ggplot(conf_data, aes(x = Actual, y = Predicted)) +
+    geom_tile(aes(fill = Freq)) +
+    geom_text(aes(label = Freq)) +
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    theme_minimal() +
+    labs(title = "Confusion Matrix for Multiclass Diabetes Prediction",
+         x = "Actual",
+         y = "Predicted")
+
+```
+
+
+```{r}
+data = cleaned_data
+label = "diabetes_012"
+
+train_data <- train_test_split(data)$train_data
+test_data <- train_test_split(data)$test_data
+
+predictors <- names(data)[!names(data) %in% 
+                               c("is_diabetes", "is_prediabetes", "is_no_diabetes", "diabetes_012")]
+
+formula <- as.formula(paste(label,"~", paste(predictors, collapse = " + ")))
+
+logistic_model <- multinom(formula, data = train_data, maxit=1500)
+# Get predictions
+predictions <- predict(logistic_model, newdata = test_data)
+
+# Create confusion matrix
+conf_matrix <- table(Predicted = predictions, Actual = test_data$diabetes_012)
+
+# Define evaluation function
+eval_metrics <- function(x) {
+    cc <- sum(diag(x))
+    sc <- sum(x)
+    pp <- colSums(x)
+    tt <- rowSums(x)
+    
+    # Calculate metrics
+    prec <- diag(x)/colSums(x)
+    recall <- diag(x)/rowSums(x)
+    macro_prec <- mean(prec)
+    macro_recall <- mean(recall)
+    macro_f1 <- 2 * macro_prec * macro_recall/(macro_prec + macro_recall)
+    acc <- cc/sc
+    kap <- (cc * sc - sum(pp * tt))/(sc^2 - sum(pp * tt))
+    
+    return(list(
+        Precision = prec,   
+        Recall = recall,
+        Accuracy = acc,
+        Kappa = kap,
+        Macro_F1 = macro_f1
+    ))
+}
+
+# Calculate and display metrics
+metrics <- eval_metrics(conf_matrix)
+print(metrics)
+
+# Visualize confusion matrix
+conf_data <- as.data.frame(conf_matrix)
+ggplot(conf_data, aes(x = Actual, y = Predicted)) +
+    geom_tile(aes(fill = Freq)) +
+    geom_text(aes(label = Freq)) +
+    scale_fill_gradient(low = "white", high = "steelblue") +
+    theme_minimal() +
+    labs(title = "Confusion Matrix for Multiclass Diabetes Prediction",
+         x = "Actual",
+         y = "Predicted")
+
+```
+
